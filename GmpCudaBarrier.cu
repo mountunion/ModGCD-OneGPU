@@ -1,0 +1,53 @@
+/*  GmpCudaBarrier.cu -- provides a device wide synchronization barrier.
+
+    K. Weber weberk@mountunion.edu
+    January 23, 2018
+
+*/
+
+#include <cassert>
+#include <cuda_runtime.h>
+#include "GmpCudaBarrier.h"
+using namespace GmpCuda;
+
+//  Initialize the base pointer for the global barrier.
+//  barrier points to a quadruple circular buffer in global memory used for sharing
+//  nonzero uint64_t data among multiprocessors.
+GmpCudaBarrier::GmpCudaBarrier(int gridSize) : copy(false), row(0)
+{
+  assert(cudaSuccess == cudaMallocPitch(&barrier, &pitch, gridSize * sizeof(uint64_t), 4));
+  assert(cudaSuccess == cudaMemset(const_cast<char *>(barrier), 0xff, pitch * 4));
+}
+
+GmpCudaBarrier::~GmpCudaBarrier()
+{
+#if !defined(__CUDA_ARCH__)
+  if (copy)
+    return;
+  assert(cudaSuccess == cudaFree(const_cast<char *>(barrier)));
+#endif
+}
+
+//  Whenever a GmpCudaBarrier object is moved or copied, mark copy
+//  so the destructor will not try to deallocate the global memory.
+GmpCudaBarrier& GmpCudaBarrier::operator= (const GmpCudaBarrier& orig)
+{
+  pitch   = orig.pitch;
+  barrier = orig.barrier;
+  row     = orig.row;
+  copy    = true;
+  //  On host, need to initialize the second row of the barrier to all zeros.
+  #if !defined(__CUDA_ARCH__)
+    assert(cudaSuccess == cudaMemset(const_cast<char *>(barrier) + pitch, 0, pitch));
+  #endif
+  return *this;
+}
+
+GmpCudaBarrier& GmpCudaBarrier::operator= (GmpCudaBarrier&& orig)
+{
+  *this = orig;
+  return *this;
+}
+
+GmpCudaBarrier::GmpCudaBarrier(      GmpCudaBarrier&& orig){*this = orig;}
+GmpCudaBarrier::GmpCudaBarrier(const GmpCudaBarrier&  orig){*this = orig;}
