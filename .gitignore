@@ -4,3 +4,8 @@
 *.ptx
 *.cubin
 *.fatbin
+*.o
+testmodgcd22
+testmodgcd32
+createModuli
+moduli/
