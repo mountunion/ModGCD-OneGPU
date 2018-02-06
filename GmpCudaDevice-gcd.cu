@@ -54,6 +54,8 @@ using namespace GmpCuda;
 #include "moduli.h"
 #include <iostream>
 
+#define GRID_SYNC 1
+
 namespace  //  used only within this compilation unit, and only for device code.
 {
 #if defined(CUDART_VERSION) && CUDART_VERSION >= 9000
@@ -705,8 +707,11 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
     blockDim >>= 1;
   while (blockDim * gridSize >= 2 * numModuliNeeded)
     blockDim >>= 1;
+  if (blockDim > 512)
+    blockDim = 736;
   if (blockDim < props.warpSize)
     blockDim = props.warpSize;
+
   int numThreads = gridSize * blockDim;
   int modPerThread = static_cast<int>(ceil(numModuliNeeded / numThreads));
   if (modPerThread < 1)
@@ -729,12 +734,21 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
 
   //  Execute a specific kernel, based on whether we are collecting statistics.
   size_t sharedSz = sizeof(uint64_t) * props.warpSize;
+#ifdef GRID_SYNC
+  if (collectStats)
+    sharedSz += sizeof(struct GmpCudaGcdStats);
+  //  Execute a specific kernel, based on whether we are collecting statistics.
+  void *args[] = {&globalBuf, &uSz, &vSz, &modPerThread, &*barrier, &stats};
+  void *k = (void*)((collectStats) ? kernel<true> : kernel<false>);
+  assert(cudaSuccess == cudaLaunchCooperativeKernel(k, gridSize, blockDim, args, sharedSz));
+#else
   if (collectStats)
     kernel<true> <<<gridSize, blockDim, sharedSz + sizeof(struct GmpCudaGcdStats)>>>
       (globalBuf, uSz, vSz, modPerThread, *barrier, stats);
   else
     kernel<false><<<gridSize, blockDim, sharedSz>>>
       (globalBuf, uSz, vSz, modPerThread, *barrier);
+#endif
 
   assert(cudaSuccess == cudaDeviceSynchronize());
 

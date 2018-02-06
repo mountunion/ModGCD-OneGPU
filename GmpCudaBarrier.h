@@ -1,6 +1,8 @@
 //  GmpCudaBarrier.h
 
 #include <stdint.h>
+#define GRID_SYNC 1
+#include <cooperative_groups.h>
 
 namespace GmpCuda
 {
@@ -51,12 +53,19 @@ namespace GmpCuda
     __device__ inline void collect(uint64_t& out)
     {
 #ifdef __CUDACC__
+#ifdef GRID_SYNC
+      cooperative_groups::this_grid().sync();
+#endif
       if (threadIdx.x < gridDim.x)
         {
           volatile uint64_t * bar = barRow(row) + threadIdx.x;
+#ifdef GRID_SYNC
+          out = *bar;
+#else
           do
             out = *bar;
           while (!out);
+#endif
         }
 #endif
     }
