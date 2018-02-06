@@ -184,12 +184,12 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
 
     __syncthreads();
 
-    if (STATS && threadIdx.x == 0)
-      getSharedStats()->anyPositiveCycles += clock(), getSharedStats()->mixedRadixIterations += 1;
-
     //  All warps do this and get common value for winner.
     //  Would it be faster to have 1 warp do this and put in shared memory for all?
     winner = max(0, __ffs(__ballot_sync(FULL_MASK, warpLane < numWarps && sharedPair[warpLane].value)) - 1);
+
+    if (STATS && threadIdx.x == 0)
+      getSharedStats()->anyPositiveCycles += clock(), getSharedStats()->mixedRadixIterations += 1;
 
     return sharedPair[winner];
   }
@@ -263,6 +263,7 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
 
     if (STATS && threadIdx.x == 0)
       getSharedStats()->minBarrierCycles -= clock();
+
     bar.post(x);
   }
 
@@ -545,7 +546,7 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
   template <bool STATS>
   __global__
   void
-  kernel(uint32_t* buf, size_t uSz, size_t vSz, int numModuli, GmpCudaBarrier bar, struct GmpCudaGcdStats* stats = 0)
+  kernel(uint32_t* buf, size_t uSz, size_t vSz, int numModuli, GmpCudaBarrier bar, struct GmpCudaGcdStats* stats = NULL)
   {
     struct GmpCudaGcdStats * sPtr;
 
