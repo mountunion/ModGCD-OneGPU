@@ -79,6 +79,8 @@ GmpCudaDevice::GmpCudaDevice(int n)
   if (0 < n && n < gridSize)
     gridSize = n;
 
+  gridSize = 40;
+
   barrier = new GmpCudaBarrier(gridSize);
 }
 
