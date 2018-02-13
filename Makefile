@@ -8,7 +8,7 @@ GMPDIR=
 GMPI=
 GMPL=-lgmp
 
-CUDA_ARCH=-arch=sm_60
+CUDA_ARCH=-arch=compute_50 -code=sm_52,sm_60,sm_61
 #-arch=compute_20 ## forces JIT compilation for all GPU architectures >= 2.0
 
 CXX=nvcc
@@ -37,10 +37,10 @@ GmpCudaDevice.o: GmpCudaDevice.cu GmpCudaDevice.h
 	$(CXX) $(CXXFLAGS) -c --device-c $< -o $@
 
 GmpCudaDevice-gcd22.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h moduli/22bit/moduli.h
-	$(CXX) $(CXXFLAGS) -I moduli/22bit -c --device-c $< -o $@
+	$(CXX) $(CXXFLAGS) -I moduli/22bit -c --maxrregcount 32 --device-c $< -o $@
 
 GmpCudaDevice-gcd32.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h moduli/32bit/moduli.h
-	$(CXX) $(CXXFLAGS) -I moduli/32bit -c --device-c $<  -o $@
+	$(CXX) $(CXXFLAGS) -I moduli/32bit -c --maxrregcount 32 --device-c $<  -o $@
 
 moduli/22bit/moduli.h: createModuli
 	mkdir -p moduli/22bit

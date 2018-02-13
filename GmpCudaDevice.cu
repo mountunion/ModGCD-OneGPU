@@ -51,7 +51,7 @@
 #include "GmpCudaDevice.h"
 using namespace GmpCuda;
 #include <iostream>
-#include <bitset>
+//#include <bitset>
 
 //  Initialize the CUDA device.  The device to use can be set by cudaSetDevice.
 //  If 0 < n < the device's number of SMs,
@@ -69,17 +69,20 @@ GmpCudaDevice::GmpCudaDevice(int n)
 
   // We assume warp size will always be a power of 2, even if it changes
   // for newer architectures.
-  std::bitset<8*sizeof(int)> tmp(props.warpSize);
-  assert(tmp.count() == 1);
+ // std::bitset<8*sizeof(int)> tmp(props.warpSize);
+ 
+  assert(props.warpSize == WARP_SZ);  //  Assume a fixed warp size of 32 for the forseeable future.
 
   assert(cudaSuccess == cudaMalloc(&stats, sizeof(struct GmpCudaGcdStats)));
 
-  //  Limit the grid--and the barrier size--to the number of SMs.
-  gridSize = props.multiProcessorCount;
-  if (0 < n && n < gridSize)
-    gridSize = n;
+  //  Limit the grid--and the barrier size--to the number of SMs * kernel occupancy.
+  initMaxGridSize();
+  if (0 < n && n < maxGridSize)
+    maxGridSize = n;
+    
+  gridSize = maxGridSize;
 
-  barrier = new GmpCudaBarrier(gridSize);
+  barrier = new GmpCudaBarrier(maxGridSize);
 }
 
 GmpCudaDevice::~GmpCudaDevice()

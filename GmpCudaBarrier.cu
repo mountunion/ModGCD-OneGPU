@@ -8,6 +8,7 @@
 #include <cassert>
 #include <cuda_runtime.h>
 #include "GmpCudaBarrier.h"
+#include <iostream>
 using namespace GmpCuda;
 
 //  Initialize the base pointer for the global barrier.
@@ -37,9 +38,9 @@ GmpCudaBarrier& GmpCudaBarrier::operator= (const GmpCudaBarrier& orig)
   row     = orig.row;
   copy    = true;
   //  On host, need to initialize the second row of the barrier to all zeros.
-  #if !defined(__CUDA_ARCH__)
-    assert(cudaSuccess == cudaMemset(const_cast<char *>(barrier) + pitch, 0, pitch));
-  #endif
+#if !defined(__CUDA_ARCH__)
+  assert(cudaSuccess == cudaMemset(const_cast<char *>(barrier) + pitch, 0, pitch));
+#endif
   return *this;
 }
 

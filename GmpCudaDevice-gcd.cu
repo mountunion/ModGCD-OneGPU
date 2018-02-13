@@ -59,6 +59,7 @@ namespace  //  used only within this compilation unit, and only for device code.
 #if defined(CUDART_VERSION) && CUDART_VERSION >= 9000
 
   constexpr unsigned int FULL_MASK = 0xffffffff;
+  constexpr int BLOCK_SZ = WARP_SZ * WARP_SZ / 2;
 
 #else
 
@@ -78,7 +79,7 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
 
 #endif
 
-  constexpr size_t MAX_MODULI_PER_THREAD = 32;
+  constexpr size_t MAX_MODULI_PER_THREAD = 1;
 
   //  This type is used to pass back the gcd from the kernel as a list of pairs.
   typedef struct __align__(8) {uint32_t modulus; int32_t value;} pair_t;
@@ -199,16 +200,16 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
   void
   minWarp(uint64_t &x)
   {
-      switch (warpSize)
-        {
-          default: assert(false);
-          case 32:
+//      switch (warpSize)
+//        {
+//          default: assert(false);
+//          case 32:
             x = min(x, __shfl_xor_sync(FULL_MASK, x, 16));
             x = min(x, __shfl_xor_sync(FULL_MASK, x,  8));
             x = min(x, __shfl_xor_sync(FULL_MASK, x,  4));
             x = min(x, __shfl_xor_sync(FULL_MASK, x,  2));
             x = min(x, __shfl_xor_sync(FULL_MASK, x,  1));
-        }
+//        }
   }
 
   template <bool STATS>
@@ -235,31 +236,11 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
 
     //  Now use the low warp to find the min of the values in sharedUint64.
     int numWarps = (blockDim.x - 1) / warpSize + 1;
-#if 1
     if (threadIdx.x < warpSize)
       {
         x = (threadIdx.x < numWarps) ? sharedUint64[threadIdx.x] : static_cast<uint64_t>(-1);
         minWarp(x);
       }
-#else
-      //  There should only be a few values to find the min of now.
-      //  If there is more than one, put the min of these in slot 0.
-      switch  (numWarps)
-        {
-          default:
-            if (threadIdx.x < warpSize)
-              {
-                x = (threadIdx.x < numWarps) ? sharedUint64[threadIdx.x] : static_cast<uint64_t>(-1);
-                minWarp(x);
-              }
-            break;
-          case 2:
-            if (threadIdx.x == 0)
-              x = min(sharedUint64[0], sharedUint64[1]);
-          case 1:
-            break;
-        }
-#endif
 
     if (STATS && threadIdx.x == 0)
       getSharedStats()->minBarrierCycles -= clock();
@@ -301,10 +282,13 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
         default:
           if (threadIdx.x < warpSize)
             {
-              x = (warpLane < numWarps) ? sharedUint64[warpLane] : static_cast<uint64_t>(-1);
+              x = (threadIdx.x < numWarps) ? sharedUint64[threadIdx.x] : static_cast<uint64_t>(-1);
               minWarp(x);
+              __syncwarp();
               if (threadIdx.x == 0)
-                *sharedUint64 = x;
+                {
+                    *sharedUint64 = x;
+                }
             }
           __syncthreads();
           break;
@@ -312,6 +296,7 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
           if (threadIdx.x == 0)
             *sharedUint64 = min(sharedUint64[0], sharedUint64[1]);
           __syncthreads();
+          break;
         case 1:
           break;
       }
@@ -549,7 +534,10 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
   kernel(uint32_t* buf, size_t uSz, size_t vSz, int numModuli, GmpCudaBarrier bar, struct GmpCudaGcdStats* stats = NULL)
   {
     struct GmpCudaGcdStats * sPtr;
-
+    int totalModuliRemaining = numModuli * blockDim.x * gridDim.x;
+    int ubits = (uSz + 1) * 32;  // somewhat of an overestimate
+    int vbits = (vSz + 1) * 32;  // same here
+    
     //  The arithmetic used on the clock requires the exact same type size all the time.
     //  It uses the fact that the arithmetic is modulo 2^32.
     if (STATS && threadIdx.x == 0)
@@ -577,6 +565,9 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
 
     //MGCD3: [reduction loop]
 
+//    if (blockIdx.x == 0 && threadIdx.x == 0)
+ //     printf("###\n");
+
     pair_t pair;
     int t = numModuli - 1;  //  The top of a stack of moduli for this thread.
 
@@ -584,12 +575,15 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
     pair.modulus = q[t].modulus;
     postMinPair<STATS>(pair, bar);
     pair = collectMinPair<STATS>(bar);
-
+    
     do
       {
         pair_t newPair = {q[0].modulus, 0};
         if (t >= 0 && equals(pair.modulus, q[t]))  //  deactivate this modulus.
-          t -= 1;
+          {
+            t -= 1;
+          }
+        totalModuliRemaining -= 1;
         if (t >= 0)
           {
             uint32_t p = pair.modulus;
@@ -602,6 +596,9 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
             newPair.modulus = q[t].modulus;
           }
         postMinPair<STATS>(newPair, bar);
+        int tbits = ubits - (L - 1) + __ffs(abs(pair.value));  //  Conservative estimate--THIS NEEDS REVIEWED
+        ubits = vbits;
+        vbits = tbits;
         for (int i = 0; i < t; i += 1)
 	        {
             uint32_t p = pair.modulus;
@@ -613,7 +610,14 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
 	        }
         pair = collectMinPair<STATS>(bar);
       }
-    while (pair.value);
+    while (pair.value != 0 && totalModuliRemaining > ubits / (L - 1));
+    
+    if (pair.value != 0)  //  Ran out of moduli--means initial estimate was wrong.
+      {
+        if (blockIdx.x == 0 && threadIdx.x == 0)
+          *buf = 0;
+        return;
+      } 
 
     //MGCD4: [Find SIGNED mixed-radix representation] Each "digit" is either positive or negative.
 
@@ -660,8 +664,14 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
             uq[i] = modDiv(modSub(uq[i], fromSigned(pair.value, q[i]), q[i]), p, q[i]);
           }
         pair = collectAnyPair<STATS>(bar);
+//        cnt += 1;
+//        if (blockIdx.x == 0 && threadIdx.x == 0)
+//            printf("-->%d\n", cnt);
       }
     while (pair.value);
+
+//    if (blockIdx.x == 0 && threadIdx.x == 0)
+//      printf("---\n");
 
     if (blockIdx.x | threadIdx.x)
       return;
@@ -677,6 +687,19 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
   }
 }
 //  All that follows is host only code.
+
+void
+__host__
+GmpCudaDevice::initMaxGridSize()
+{
+  assert(BLOCK_SZ <= props.maxThreadsPerBlock);
+  size_t sharedSz = sizeof(uint64_t) * WARP_SZ;
+  if (collectStats)
+    sharedSz += sizeof(struct GmpCudaGcdStats);
+  int numBlocksPerSM;
+  assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSM, (collectStats) ? kernel<true> : kernel<false>, BLOCK_SZ, sharedSz));
+  maxGridSize = props.multiProcessorCount * numBlocksPerSM;
+}
 
 void
 __host__
@@ -696,18 +719,24 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
   mpz_export(buf      , &uSz, -1, sizeof(uint32_t), 0, 0, u);
   mpz_export(buf + uSz, &vSz, -1, sizeof(uint32_t), 0, 0, v);
   memset(buf + uSz + vSz, 0, sizeof(buf) - (uSz + vSz) * sizeof(uint32_t));
+  
+  size_t sharedSz = sizeof(uint64_t) * WARP_SZ;
+  if (collectStats)
+    sharedSz += sizeof(struct GmpCudaGcdStats);
 
   //  Number of moduli needed is approximated by a function of the number of bits in the larger input.
-  const float MODULI_MULTIPLIER = 1.6 - 0.015 * L;  //  Heuristically obtained formula.
+  const float MODULI_MULTIPLIER = 1.6 - 0.014 * L;  //  Heuristically obtained formula.
   float numModuliNeeded = ceil(MODULI_MULTIPLIER * ubits / logf(ubits));
-  int blockDim = props.warpSize * props.warpSize;  //  At most two levels of reduction for global min.
-  while (blockDim > props.maxThreadsPerBlock)
-    blockDim >>= 1;
-  while (blockDim * gridSize >= 2 * numModuliNeeded)
-    blockDim >>= 1;
-  if (blockDim < props.warpSize)
-    blockDim = props.warpSize;
-  int numThreads = gridSize * blockDim;
+  
+  int blockDim = BLOCK_SZ;
+  
+  gridSize = min(maxGridSize, static_cast<int>(ceil(numModuliNeeded/blockDim)));  //  grid size used to launch this kernel.
+  if (gridSize > blockDim)
+    gridSize = blockDim;
+   
+  //std::cout << "Block size = " << blockDim << "Grid size == " << gridSize << std::endl;
+  
+  int numThreads = blockDim * gridSize;    
   int modPerThread = static_cast<int>(ceil(numModuliNeeded / numThreads));
   if (modPerThread < 1)
     modPerThread = 1;
@@ -728,9 +757,9 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
   assert(cudaSuccess == cudaMemcpy(globalBuf, buf, sizeof(buf), cudaMemcpyHostToDevice));
 
   //  Execute a specific kernel, based on whether we are collecting statistics.
-  size_t sharedSz = sizeof(uint64_t) * props.warpSize;
+
   if (collectStats)
-    kernel<true> <<<gridSize, blockDim, sharedSz + sizeof(struct GmpCudaGcdStats)>>>
+    kernel<true> <<<gridSize, blockDim, sharedSz>>>
       (globalBuf, uSz, vSz, modPerThread, *barrier, stats);
   else
     kernel<false><<<gridSize, blockDim, sharedSz>>>
@@ -740,6 +769,8 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
 
   // Copy result from global memory and convert from mixed-radix to standard representation.
   assert(cudaSuccess == cudaMemcpy(buf, globalBuf, 2*sizeof(pair_t), cudaMemcpyDeviceToHost));  // Just size and 0th mixed-radix digit read now.
+  
+  assert(buf[0] != 0);  //  buf[0] == 0 means we ran out of moduli.
 
   if (buf[0] > 1)
     assert(cudaSuccess == cudaMemcpy(reinterpret_cast<pair_t*>(buf), globalBuf, buf[0] * sizeof(pair_t), cudaMemcpyDeviceToHost));//

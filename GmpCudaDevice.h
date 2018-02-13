@@ -9,6 +9,7 @@
 
 namespace GmpCuda
 {
+  constexpr int WARP_SZ = 32;
   struct GmpCudaGcdStats
   {
     uint32_t
@@ -35,7 +36,9 @@ namespace GmpCuda
     struct cudaDeviceProp props;
     int deviceNum;
     int gridSize;
+    int maxGridSize;
     bool collectStats;
+    void initMaxGridSize();
   public:
     GmpCudaDevice(int);
     ~GmpCudaDevice();
