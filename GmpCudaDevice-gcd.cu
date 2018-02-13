@@ -59,7 +59,6 @@ namespace  //  used only within this compilation unit, and only for device code.
 #if defined(CUDART_VERSION) && CUDART_VERSION >= 9000
 
   constexpr unsigned int FULL_MASK = 0xffffffff;
-  constexpr int BLOCK_SZ = WARP_SZ * WARP_SZ / 2;
 
 #else
 
@@ -79,7 +78,7 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
 
 #endif
 
-  constexpr size_t MAX_MODULI_PER_THREAD = 1;
+  constexpr int BLOCK_SZ = WARP_SZ << 3;
 
   //  This type is used to pass back the gcd from the kernel as a list of pairs.
   typedef struct __align__(8) {uint32_t modulus; int32_t value;} pair_t;
@@ -87,34 +86,30 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
   //  Various ways to access dynamically allocated shared memory.
   //  The code is expecting at least warpSize * sizeof(uint64_t) bytes
   //  of shared memory to be allocated dynamically.
-  extern __shared__ uint64_t sharedUint64[];
-  extern __shared__ pair_t   sharedPair[];
-  extern __shared__ uint32_t sharedUint32[];
+  __shared__ union
+    {
+      uint64_t uint64[WARP_SZ];
+      pair_t   pair[WARP_SZ];
+      uint32_t uint32[WARP_SZ];
+    }
+  shared;
 
+  __shared__ GmpCudaGcdStats stats;
   //  This function is used to calculate a pointer to the "end"
-  //  of sharedUint64[], where space for the statistics is
+  //  of shared.uint64[], where space for the statistics is
   //  allocated when statistics are called for.
+  
   __device__
   inline
-  GmpCudaGcdStats *
-  getSharedStats()
+  void
+  initSharedStats()
   {
-     return (struct GmpCudaGcdStats *)(sharedUint64 + warpSize);
-  }
-
-      __device__
-  inline
-  GmpCudaGcdStats *
-  initSharedStats(int numModuli)
-  {
-    GmpCudaGcdStats * sPtr = getSharedStats();
-    sPtr->modPerThread = numModuli;
-    sPtr->blockDim = blockDim.x;
-    sPtr->convertToModularCycles = sPtr->reductionCycles = sPtr->minPositiveCycles = sPtr->minBarrierCycles
-                                 = sPtr->mixedRadixCycles = sPtr->anyBarrierCycles = sPtr->anyPositiveCycles
-                                 = sPtr->reductionIterations = sPtr->mixedRadixIterations = 0;
-    sPtr->totalCycles = -clock();
-    return sPtr;
+    stats.modPerThread = 1;
+    stats.blockDim = blockDim.x;
+    stats.convertToModularCycles = stats.reductionCycles = stats.minPositiveCycles = stats.minBarrierCycles
+                                 = stats.mixedRadixCycles = stats.anyBarrierCycles = stats.anyPositiveCycles
+                                 = stats.reductionIterations = stats.mixedRadixIterations = 0;
+    stats.totalCycles = -clock();
   }
 
   inline
@@ -134,24 +129,24 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
   postAnyPair(pair_t pair, GmpCudaBarrier &bar)
   {
     if (STATS && threadIdx.x == 0)
-      getSharedStats()->anyPositiveCycles -= clock();
+      stats.anyPositiveCycles -= clock();
 
     int winner = max(0, __ffs(__ballot_sync(FULL_MASK, pair.value)) - 1);
     //  in case there is no winner, use the 0 from warpLane 0.
     if (winner == threadIdx.x % warpSize)
-      sharedPair[threadIdx.x / warpSize] = pair;
+      shared.pair[threadIdx.x / warpSize] = pair;
 
     __syncthreads();
 
     int numWarps = (blockDim.x - 1) / warpSize + 1;
 
     if (threadIdx.x < numWarps)
-       winner = max(0, __ffs(__ballot_sync(FULL_MASK, sharedPair[threadIdx.x].value)) - 1);
+       winner = max(0, __ffs(__ballot_sync(FULL_MASK, shared.pair[threadIdx.x].value)) - 1);
 
     if (STATS && threadIdx.x == 0)
-      getSharedStats()->anyBarrierCycles -= clock();
+      stats.anyBarrierCycles -= clock();
 
-    bar.post(*(uint64_t *)(sharedPair + winner));
+    bar.post(*(uint64_t *)(shared.pair + winner));
   }
 
   //  Chooses one of the value parameters from ALL threads such that value is positive.
@@ -168,7 +163,7 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
     bar.collect(*reinterpret_cast<uint64_t*>(&pair)); // Only low gridDim.x threads have "good" values.
 
     if (STATS && threadIdx.x == 0)
-      getSharedStats()->anyBarrierCycles += clock();
+      stats.anyBarrierCycles += clock();
 
     int winner;
     int warpLane = threadIdx.x % warpSize;
@@ -180,19 +175,19 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
         winner = max(0, __ffs(__ballot_sync(FULL_MASK, pair.value)) - 1);
         //  in case there is no winner, use the 0 from warpLane 0.
         if (winner == warpLane)
-          sharedPair[warpIdx] = pair;
+          shared.pair[warpIdx] = pair;
       }
 
     __syncthreads();
 
     //  All warps do this and get common value for winner.
     //  Would it be faster to have 1 warp do this and put in shared memory for all?
-    winner = max(0, __ffs(__ballot_sync(FULL_MASK, warpLane < numWarps && sharedPair[warpLane].value)) - 1);
+    winner = max(0, __ffs(__ballot_sync(FULL_MASK, warpLane < numWarps && shared.pair[warpLane].value)) - 1);
 
     if (STATS && threadIdx.x == 0)
-      getSharedStats()->anyPositiveCycles += clock(), getSharedStats()->mixedRadixIterations += 1;
+      stats.anyPositiveCycles += clock(), stats.mixedRadixIterations += 1;
 
-    return sharedPair[winner];
+    return shared.pair[winner];
   }
 
   //  calculate min into all lanes of a warp.
@@ -218,7 +213,7 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
   postMinPair(pair_t pair, GmpCudaBarrier &bar)
   {
     if (STATS && threadIdx.x == 0)
-      getSharedStats()->minPositiveCycles -= clock();
+      stats.minPositiveCycles -= clock();
 
     //  Prepare a long int composed of the absolute value of pair.value in the high bits and pair.modulus in the low bits.
     //  Subtract 1 from pair.value to make 0 become "largest"; must restore at end.
@@ -228,22 +223,22 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
     x <<= 32;
     x |= pair.modulus - (pair.value >= 0);
 
-    //  Find the smallest in each warp, and store in sharedUint64.
+    //  Find the smallest in each warp, and store in shared.uint64.
     minWarp(x);
     if (threadIdx.x % warpSize == 0)
-      sharedUint64[threadIdx.x / warpSize] = x;
+      shared.uint64[threadIdx.x / warpSize] = x;
     __syncthreads();
 
-    //  Now use the low warp to find the min of the values in sharedUint64.
+    //  Now use the low warp to find the min of the values in shared.uint64.
     int numWarps = (blockDim.x - 1) / warpSize + 1;
     if (threadIdx.x < warpSize)
       {
-        x = (threadIdx.x < numWarps) ? sharedUint64[threadIdx.x] : static_cast<uint64_t>(-1);
+        x = (threadIdx.x < numWarps) ? shared.uint64[threadIdx.x] : static_cast<uint64_t>(-1);
         minWarp(x);
       }
 
     if (STATS && threadIdx.x == 0)
-      getSharedStats()->minBarrierCycles -= clock();
+      stats.minBarrierCycles -= clock();
 
     bar.post(x);
   }
@@ -259,7 +254,7 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
     bar.collect(x);
 
     if (STATS && threadIdx.x == 0)
-      getSharedStats()->minBarrierCycles += clock();
+      stats.minBarrierCycles += clock();
 
     int warpLane = threadIdx.x % warpSize;
     int warpIdx = threadIdx.x / warpSize;
@@ -270,7 +265,7 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
           x = static_cast<uint64_t>(-1);
         minWarp(x);
         if (warpLane == 0)
-          sharedUint64[warpIdx] = x;
+          shared.uint64[warpIdx] = x;
       }
 
     __syncthreads();
@@ -282,26 +277,26 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
         default:
           if (threadIdx.x < warpSize)
             {
-              x = (threadIdx.x < numWarps) ? sharedUint64[threadIdx.x] : static_cast<uint64_t>(-1);
+              x = (threadIdx.x < numWarps) ? shared.uint64[threadIdx.x] : static_cast<uint64_t>(-1);
               minWarp(x);
               __syncwarp();
               if (threadIdx.x == 0)
                 {
-                    *sharedUint64 = x;
+                    *shared.uint64 = x;
                 }
             }
           __syncthreads();
           break;
         case 2:
           if (threadIdx.x == 0)
-            *sharedUint64 = min(sharedUint64[0], sharedUint64[1]);
+            *shared.uint64 = min(shared.uint64[0], shared.uint64[1]);
           __syncthreads();
           break;
         case 1:
           break;
       }
 
-    pair_t pair = *sharedPair;  // sharedPair is an alias for sharedUint64
+    pair_t pair = *shared.pair;  // shared.pair is an alias for shared.uint64
 
     //  Restore original value and sign.
     pair.value += 1;
@@ -310,7 +305,7 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
     pair.modulus |= 1;
 
     if (STATS && threadIdx.x == 0)
-      getSharedStats()->minPositiveCycles += clock(), getSharedStats()->reductionIterations += 1;
+      stats.minPositiveCycles += clock(), stats.reductionIterations += 1;
 
     return pair;
   }
@@ -510,19 +505,19 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
         xSz -= warpSize;
         //  Copy a block of x to shared memory for processing.
         if (threadIdx.x < warpSize)
-          sharedUint32[threadIdx.x] = x[threadIdx.x + xSz];
+          shared.uint32[threadIdx.x] = x[threadIdx.x + xSz];
         __syncthreads();
         //  Process the block in shared memory.
         for (size_t i = warpSize; i-- != 0;  )
-          result = mod(result << 32 | sharedUint32[i], m);
+          result = mod(result << 32 | shared.uint32[i], m);
         __syncthreads();
       }
     //  Now xSz <= warpSize.  Copy remainder of x to shared memory and process.
     if (threadIdx.x < xSz)
-      sharedUint32[threadIdx.x] = x[threadIdx.x];
+      shared.uint32[threadIdx.x] = x[threadIdx.x];
     __syncthreads();
     for (size_t i = xSz; i-- != 0;  )
-      result = mod(result << 32 | sharedUint32[i], m);
+      result = mod(result << 32 | shared.uint32[i], m);
     __syncthreads();
     return static_cast<uint32_t>(result);
   }
@@ -531,55 +526,46 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
   template <bool STATS>
   __global__
   void
-  kernel(uint32_t* buf, size_t uSz, size_t vSz, int numModuli, GmpCudaBarrier bar, struct GmpCudaGcdStats* stats = NULL)
+  kernel(uint32_t* buf, size_t uSz, size_t vSz, GmpCudaBarrier bar, struct GmpCudaGcdStats* gStats = NULL)
   {
-    struct GmpCudaGcdStats * sPtr;
-    int totalModuliRemaining = numModuli * blockDim.x * gridDim.x;
+    int totalModuliRemaining = 1 * blockDim.x * gridDim.x;
     int ubits = (uSz + 1) * 32;  // somewhat of an overestimate
     int vbits = (vSz + 1) * 32;  // same here
     
     //  The arithmetic used on the clock requires the exact same type size all the time.
     //  It uses the fact that the arithmetic is modulo 2^32.
     if (STATS && threadIdx.x == 0)
-        sPtr = initSharedStats(numModuli);
+      initSharedStats();
 
     //MGCD1: [Find suitable moduli]
-    modulus_t q[MAX_MODULI_PER_THREAD];
-    for (int i = numModuli, d = blockDim.x * gridDim.x, m = blockDim.x * blockIdx.x + threadIdx.x; i > 0; m += d)
-      q[--i] = moduliList[m];  //  q[0] holds smallest modulus.
+    modulus_t q = moduliList[blockDim.x * blockIdx.x + threadIdx.x];
 
     //MGCD2: [Convert to modular representation]
 
     if (STATS && threadIdx.x == 0)
-      sPtr->convertToModularCycles -= clock();
+      stats.convertToModularCycles -= clock();
 
-    uint32_t uq[MAX_MODULI_PER_THREAD], vq[MAX_MODULI_PER_THREAD];
-    for (int i = 0; i < numModuli; i += 1)
-      {
-        uq[i] = modMP(buf,       uSz, q[i]);
-        vq[i] = modMP(buf + uSz, vSz, q[i]);
-      }
+    uint32_t uq, vq;
+    uq = modMP(buf,       uSz, q);
+    vq = modMP(buf + uSz, vSz, q);
 
     if (STATS && threadIdx.x == 0)
-      sPtr->convertToModularCycles += clock(), sPtr->reductionCycles -= clock();
+      stats.convertToModularCycles += clock(), stats.reductionCycles -= clock();
 
     //MGCD3: [reduction loop]
 
-//    if (blockIdx.x == 0 && threadIdx.x == 0)
- //     printf("###\n");
-
     pair_t pair;
-    int t = numModuli - 1;  //  The top of a stack of moduli for this thread.
+    int t = 0;  //  The top of a stack of moduli for this thread.
 
-    pair.value = (vq[t]) ? toSigned(modDiv(uq[t], vq[t], q[t]), q[t]) : 0;
-    pair.modulus = q[t].modulus;
+    pair.value = (vq) ? toSigned(modDiv(uq, vq, q), q) : 0;
+    pair.modulus = q.modulus;
     postMinPair<STATS>(pair, bar);
     pair = collectMinPair<STATS>(bar);
     
     do
       {
-        pair_t newPair = {q[0].modulus, 0};
-        if (t >= 0 && equals(pair.modulus, q[t]))  //  deactivate this modulus.
+        pair_t newPair = {q.modulus, 0};
+        if (t >= 0 && equals(pair.modulus, q))  //  deactivate this modulus.
           {
             t -= 1;
           }
@@ -587,27 +573,18 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
         if (t >= 0)
           {
             uint32_t p = pair.modulus;
-            if (p > q[t].modulus)  //  Bring within range.
-              p -= q[t].modulus;
-            uint32_t tq = modDiv(modSub(uq[t], modMul(fromSigned(pair.value, q[t]), vq[t], q[t]), q[t]), p, q[t]);
-            uq[t] = vq[t];
-            vq[t] = tq;
-            newPair.value = (vq[t]) ? toSigned(modDiv(uq[t], vq[t], q[t]), q[t]) : 0;
-            newPair.modulus = q[t].modulus;
+            if (p > q.modulus)  //  Bring within range.
+              p -= q.modulus;
+            uint32_t tq = modDiv(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
+            uq = vq;
+            vq = tq;
+            newPair.value = (vq) ? toSigned(modDiv(uq, vq, q), q) : 0;
+            newPair.modulus = q.modulus;
           }
         postMinPair<STATS>(newPair, bar);
         int tbits = ubits - (L - 1) + __ffs(abs(pair.value));  //  Conservative estimate--THIS NEEDS REVIEWED
         ubits = vbits;
         vbits = tbits;
-        for (int i = 0; i < t; i += 1)
-	        {
-            uint32_t p = pair.modulus;
-            if (p > q[i].modulus)  //  Bring within range.
-              p -= q[i].modulus;
-            uint32_t tq = modDiv(modSub(uq[i], modMul(fromSigned(pair.value, q[i]), vq[i], q[i]), q[i]), p, q[i]);
-            uq[i] = vq[i];
-            vq[i] = tq;
-	        }
         pair = collectMinPair<STATS>(bar);
       }
     while (pair.value != 0 && totalModuliRemaining > ubits / (L - 1));
@@ -622,19 +599,19 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
     //MGCD4: [Find SIGNED mixed-radix representation] Each "digit" is either positive or negative.
 
     if (STATS && threadIdx.x == 0)
-      sPtr->reductionCycles += clock(), sPtr->mixedRadixCycles -= clock();
+      stats.reductionCycles += clock(), stats.mixedRadixCycles -= clock();
 
     pair_t* pairs = (pair_t *)buf + 1;
 
     if (t >= 0)
       {
-        pair.value = toSigned(uq[t], q[t]);
-        pair.modulus = q[t].modulus;
+        pair.value = toSigned(uq, q);
+        pair.modulus = q.modulus;
       }
     else
       {
         pair.value = 0;
-        pair.modulus = q[0].modulus;
+        pair.modulus = q.modulus;
       }
 
     postAnyPair<STATS>(pair, bar);
@@ -643,35 +620,23 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
     do
       {
         *pairs++ = pair;
-        pair_t newPair = {q[0].modulus, 0};
-        if (t >= 0 && equals(pair.modulus, q[t]))  //  deactivate modulus.
+        pair_t newPair = {q.modulus, 0};
+        if (t >= 0 && equals(pair.modulus, q))  //  deactivate modulus.
           t -= 1;
         if (t >= 0)
           {
             uint32_t p = pair.modulus;
-            if (pair.modulus > q[t].modulus)  //  Bring within range.
-              p -= q[t].modulus;
-            uq[t] = modDiv(modSub(uq[t], fromSigned(pair.value, q[t]), q[t]), p, q[t]);
-            newPair.value = toSigned(uq[t], q[t]);
-            newPair.modulus = q[t].modulus;
+            if (pair.modulus > q.modulus)  //  Bring within range.
+              p -= q.modulus;
+            uq = modDiv(modSub(uq, fromSigned(pair.value, q), q), p, q);
+            newPair.value = toSigned(uq, q);
+            newPair.modulus = q.modulus;
           }
         postAnyPair<STATS>(newPair, bar);
-        for (int i = 0; i < t; i += 1)
-          {
-            uint32_t p = pair.modulus;
-            if (pair.modulus > q[i].modulus)  //  Bring within range.
-              p -= q[i].modulus;
-            uq[i] = modDiv(modSub(uq[i], fromSigned(pair.value, q[i]), q[i]), p, q[i]);
-          }
         pair = collectAnyPair<STATS>(bar);
-//        cnt += 1;
-//        if (blockIdx.x == 0 && threadIdx.x == 0)
-//            printf("-->%d\n", cnt);
       }
     while (pair.value);
 
-//    if (blockIdx.x == 0 && threadIdx.x == 0)
-//      printf("---\n");
 
     if (blockIdx.x | threadIdx.x)
       return;
@@ -680,9 +645,9 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
 
     if (STATS)
       {
-        sPtr->mixedRadixCycles += clock();
-        sPtr->totalCycles += clock();
-        *stats = *sPtr;
+        stats.mixedRadixCycles += clock();
+        stats.totalCycles += clock();
+        *gStats = stats;
       }
   }
 }
@@ -693,11 +658,8 @@ __host__
 GmpCudaDevice::initMaxGridSize()
 {
   assert(BLOCK_SZ <= props.maxThreadsPerBlock);
-  size_t sharedSz = sizeof(uint64_t) * WARP_SZ;
-  if (collectStats)
-    sharedSz += sizeof(struct GmpCudaGcdStats);
   int numBlocksPerSM;
-  assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSM, (collectStats) ? kernel<true> : kernel<false>, BLOCK_SZ, sharedSz));
+  assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&numBlocksPerSM, (collectStats) ? kernel<true> : kernel<false>, BLOCK_SZ, 0));
   maxGridSize = props.multiProcessorCount * numBlocksPerSM;
 }
 
@@ -720,32 +682,21 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
   mpz_export(buf + uSz, &vSz, -1, sizeof(uint32_t), 0, 0, v);
   memset(buf + uSz + vSz, 0, sizeof(buf) - (uSz + vSz) * sizeof(uint32_t));
   
-  size_t sharedSz = sizeof(uint64_t) * WARP_SZ;
-  if (collectStats)
-    sharedSz += sizeof(struct GmpCudaGcdStats);
-
   //  Number of moduli needed is approximated by a function of the number of bits in the larger input.
   const float MODULI_MULTIPLIER = 1.6 - 0.014 * L;  //  Heuristically obtained formula.
   float numModuliNeeded = ceil(MODULI_MULTIPLIER * ubits / logf(ubits));
   
-  int blockDim = BLOCK_SZ;
-  
-  gridSize = min(maxGridSize, static_cast<int>(ceil(numModuliNeeded/blockDim)));  //  grid size used to launch this kernel.
-  if (gridSize > blockDim)
-    gridSize = blockDim;
-   
-  //std::cout << "Block size = " << blockDim << "Grid size == " << gridSize << std::endl;
-  
-  int numThreads = blockDim * gridSize;    
-  int modPerThread = static_cast<int>(ceil(numModuliNeeded / numThreads));
-  if (modPerThread < 1)
-    modPerThread = 1;
+  gridSize = min(maxGridSize, static_cast<int>(ceil(numModuliNeeded/BLOCK_SZ)));  //  grid size used to launch this kernel.
+  if (gridSize > BLOCK_SZ)
+    gridSize = BLOCK_SZ;
+     
+  int numThreads = BLOCK_SZ * gridSize;    
 
-  if (numThreads * modPerThread > NUM_MODULI)
+  if (numThreads > NUM_MODULI)
     throw std::runtime_error("Not enough moduli available for given input.");
 
-  if (modPerThread > MAX_MODULI_PER_THREAD)
-    throw std::runtime_error("Can't allocate enough per-thread storage for moduli needed");
+  if (numThreads < numModuliNeeded)
+    throw std::runtime_error("Cannot allocate enough threads to support computation.");
 
   //  Allocate some extra space in the global buffer, so that modMP can assume it can safely read a multiple of
   //  warpSize words to get the entirety (+ more) of either parameter.
@@ -759,11 +710,9 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
   //  Execute a specific kernel, based on whether we are collecting statistics.
 
   if (collectStats)
-    kernel<true> <<<gridSize, blockDim, sharedSz>>>
-      (globalBuf, uSz, vSz, modPerThread, *barrier, stats);
+    kernel<true> <<<gridSize, BLOCK_SZ>>>(globalBuf, uSz, vSz, *barrier, stats);
   else
-    kernel<false><<<gridSize, blockDim, sharedSz>>>
-      (globalBuf, uSz, vSz, modPerThread, *barrier);
+    kernel<false><<<gridSize, BLOCK_SZ>>>(globalBuf, uSz, vSz, *barrier);
 
   assert(cudaSuccess == cudaDeviceSynchronize());
 
