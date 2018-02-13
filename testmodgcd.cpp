@@ -82,7 +82,7 @@ struct MyGmpCudaGcdStats : public GmpCuda::GmpCudaGcdStats
      cout << fixed << setprecision(3)
            << i                                  << "\t"
            << blockDim                           << "\t"
-           << blockDim * g * modPerThread        << "\t"
+           << blockDim * g                       << "\t"
            << cyclesToMS(convertToModularCycles) << "\t"
            << reductionIterations                << "\t"
            << cyclesToMS(reductionCycles)        << "\t"

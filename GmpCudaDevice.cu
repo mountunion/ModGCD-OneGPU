@@ -51,7 +51,6 @@
 #include "GmpCudaDevice.h"
 using namespace GmpCuda;
 #include <iostream>
-//#include <bitset>
 
 //  Initialize the CUDA device.  The device to use can be set by cudaSetDevice.
 //  If 0 < n < the device's number of SMs,
@@ -59,6 +58,11 @@ using namespace GmpCuda;
 //  Also initializes the global barrier.
 GmpCudaDevice::GmpCudaDevice(int n)
 {
+#if defined(CUDART_VERSION) && CUDART_VERSION >= 9000
+#else
+  assert(false);  //  Require CUDA 9.
+#endif
+
   collectStats = false;  //  default.
 
   deviceNum = 0;
@@ -67,10 +71,6 @@ GmpCudaDevice::GmpCudaDevice(int n)
   //  Initialize the device properties values.
   assert(cudaSuccess == cudaGetDeviceProperties(&props, deviceNum));
 
-  // We assume warp size will always be a power of 2, even if it changes
-  // for newer architectures.
- // std::bitset<8*sizeof(int)> tmp(props.warpSize);
- 
   assert(props.warpSize == WARP_SZ);  //  Assume a fixed warp size of 32 for the forseeable future.
 
   assert(cudaSuccess == cudaMalloc(&stats, sizeof(struct GmpCudaGcdStats)));

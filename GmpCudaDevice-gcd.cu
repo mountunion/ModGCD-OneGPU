@@ -56,29 +56,9 @@ using namespace GmpCuda;
 
 namespace  //  used only within this compilation unit, and only for device code.
 {
-#if defined(CUDART_VERSION) && CUDART_VERSION >= 9000
 
-  constexpr unsigned int FULL_MASK = 0xffffffff;
-
-#else
-
-//  This is needed to support code older than CUDA 9.
-
-#define __syncwarp(X)
-#define __ballot_sync(X, Y) __ballot(Y)
-#define __shfl_xor_sync(X,Y,Z) __shfl_xor_uint64_t(Y, Z)
-
-__device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
-{
-   int2 tmp = *reinterpret_cast<int2*>(&x);
-   tmp.x = __shfl_xor(tmp.x, laneMask);
-   tmp.y = __shfl_xor(tmp.y, laneMask);
-   return *reinterpret_cast<int64_t*>(&tmp);
-}
-
-#endif
-
-  constexpr int BLOCK_SZ = WARP_SZ << 3;
+  constexpr unsigned int FULL_MASK = 0xffffffff;  //  Used in sync functions.
+  constexpr int          BLOCK_SZ  = WARP_SZ << 3;
 
   //  This type is used to pass back the gcd from the kernel as a list of pairs.
   typedef struct __align__(8) {uint32_t modulus; int32_t value;} pair_t;
@@ -89,25 +69,21 @@ __device__ inline uint64_t __shfl_xor_uint64_t(uint64_t x, int laneMask)
   __shared__ union
     {
       uint64_t uint64[WARP_SZ];
-      pair_t   pair[WARP_SZ];
+      pair_t   pair  [WARP_SZ];
       uint32_t uint32[WARP_SZ];
     }
   shared;
 
   __shared__ GmpCudaGcdStats stats;
-  //  This function is used to calculate a pointer to the "end"
-  //  of shared.uint64[], where space for the statistics is
-  //  allocated when statistics are called for.
   
   __device__
   inline
   void
   initSharedStats()
   {
-    stats.modPerThread = 1;
     stats.blockDim = blockDim.x;
-    stats.convertToModularCycles = stats.reductionCycles = stats.minPositiveCycles = stats.minBarrierCycles
-                                 = stats.mixedRadixCycles = stats.anyBarrierCycles = stats.anyPositiveCycles
+    stats.convertToModularCycles = stats.reductionCycles     = stats.minPositiveCycles    = stats.minBarrierCycles
+                                 = stats.mixedRadixCycles    = stats.anyBarrierCycles     = stats.anyPositiveCycles
                                  = stats.reductionIterations = stats.mixedRadixIterations = 0;
     stats.totalCycles = -clock();
   }

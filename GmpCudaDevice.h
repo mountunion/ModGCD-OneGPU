@@ -25,7 +25,6 @@ namespace GmpCuda
       minBarrierCycles,
       totalCycles;
       int clockRateInKHz;
-      int modPerThread;
   };
 
   class GmpCudaDevice
