@@ -8,10 +8,11 @@ GMPDIR=
 GMPI=
 GMPL=-lgmp
 
-CUDA_ARCH=-arch=compute_50 -code=sm_52,sm_60,sm_61
+CUDA_ARCH=-arch=compute_52 -code=sm_52,sm_60,sm_61
 #-arch=compute_20 ## forces JIT compilation for all GPU architectures >= 2.0
 
 CXX=nvcc
+#CXXFLAGS= $(GMPI) -g -O2 --std c++11 --use_fast_math -m64 -rdc=true $(CUDA_ARCH)
 CXXFLAGS= $(GMPI) -g -O2 --std c++11 --use_fast_math -m64 $(CUDA_ARCH)
 
 .PHONY: all clean distclean

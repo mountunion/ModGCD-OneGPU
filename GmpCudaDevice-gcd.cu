@@ -54,18 +54,24 @@ using namespace GmpCuda;
 #include "moduli.h"
 #include <iostream>
 
+#ifdef USE_COOP_GROUPS
+#include <cooperative_groups.h>
+#endif
+
 namespace  //  used only within this compilation unit, and only for device code.
 {
 
-  constexpr unsigned int FULL_MASK = 0xffffffff;  //  Used in sync functions.
-  constexpr int          BLOCK_SZ  = WARP_SZ << 3;
+  constexpr unsigned int FULL_MASK       = 0xffffffff;  //  Used in sync functions.
+
+  constexpr int WARPS_PER_BLOCK = WARP_SZ / 4;
+  constexpr int BLOCK_SZ        = WARP_SZ * WARPS_PER_BLOCK;
 
   //  This type is used to pass back the gcd from the kernel as a list of pairs.
   typedef struct __align__(8) {uint32_t modulus; int32_t value;} pair_t;
 
-  //  Various ways to access dynamically allocated shared memory.
+  //  Various ways to access  allocated shared memory.
   //  The code is expecting at least warpSize * sizeof(uint64_t) bytes
-  //  of shared memory to be allocated dynamically.
+  //  of shared memory to be allocated.
   __shared__ union
     {
       uint64_t uint64[WARP_SZ];
@@ -104,6 +110,9 @@ namespace  //  used only within this compilation unit, and only for device code.
   void
   postAnyPair(pair_t pair, GmpCudaBarrier &bar)
   {
+  
+     __syncthreads();
+     
     if (STATS && threadIdx.x == 0)
       stats.anyPositiveCycles -= clock();
 
@@ -121,6 +130,8 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     if (STATS && threadIdx.x == 0)
       stats.anyBarrierCycles -= clock();
+      
+    __syncthreads();
 
     bar.post(*(uint64_t *)(shared.pair + winner));
   }
@@ -136,7 +147,10 @@ namespace  //  used only within this compilation unit, and only for device code.
   collectAnyPair(GmpCudaBarrier &bar)
   {
     pair_t pair;
+    
     bar.collect(*reinterpret_cast<uint64_t*>(&pair)); // Only low gridDim.x threads have "good" values.
+    
+    __syncthreads();
 
     if (STATS && threadIdx.x == 0)
       stats.anyBarrierCycles += clock();
@@ -162,8 +176,12 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     if (STATS && threadIdx.x == 0)
       stats.anyPositiveCycles += clock(), stats.mixedRadixIterations += 1;
+      
+    pair = shared.pair[winner];
+    
+    __syncthreads();
 
-    return shared.pair[winner];
+    return pair;
   }
 
   //  calculate min into all lanes of a warp.
@@ -171,16 +189,9 @@ namespace  //  used only within this compilation unit, and only for device code.
   void
   minWarp(uint64_t &x)
   {
-//      switch (warpSize)
-//        {
-//          default: assert(false);
-//          case 32:
-            x = min(x, __shfl_xor_sync(FULL_MASK, x, 16));
-            x = min(x, __shfl_xor_sync(FULL_MASK, x,  8));
-            x = min(x, __shfl_xor_sync(FULL_MASK, x,  4));
-            x = min(x, __shfl_xor_sync(FULL_MASK, x,  2));
-            x = min(x, __shfl_xor_sync(FULL_MASK, x,  1));
-//        }
+#pragma unroll
+    for (int i = WARP_SZ/2; i > 0; i /= 2)
+      x = min(x, __shfl_down_sync(FULL_MASK, x, i));
   }
 
   template <bool STATS>
@@ -190,27 +201,35 @@ namespace  //  used only within this compilation unit, and only for device code.
   {
     if (STATS && threadIdx.x == 0)
       stats.minPositiveCycles -= clock();
+      
+    __syncthreads();
 
     //  Prepare a long int composed of the absolute value of pair.value in the high bits and pair.modulus in the low bits.
     //  Subtract 1 from pair.value to make 0 become "largest"; must restore at end.
     //  Store sign of pair.value in the low bit of pair.modulus, which should always be 1 since it's odd.
-    uint64_t x;
-    x = static_cast<uint32_t>(abs(pair.value)) - 1;
-    x <<= 32;
-    x |= pair.modulus - (pair.value >= 0);
-
+    uint64_t x =uint64_t{-1};
+    
+    if (pair.value != 0)
+      {
+        x = static_cast<uint64_t>(abs(pair.value) - 1);
+        x <<= 32;
+        x |= pair.modulus - (pair.value >= 0);
+      }
+ 
     //  Find the smallest in each warp, and store in shared.uint64.
     minWarp(x);
-    if (threadIdx.x % warpSize == 0)
-      shared.uint64[threadIdx.x / warpSize] = x;
+    if (threadIdx.x % WARP_SZ == 0)
+      shared.uint64[threadIdx.x / WARP_SZ] = x;
     __syncthreads();
 
-    //  Now use the low warp to find the min of the values in shared.uint64.
-    int numWarps = (blockDim.x - 1) / warpSize + 1;
-    if (threadIdx.x < warpSize)
+    //  Now find the min of the values in shared.uint64.
+   // unsigned int mask = __ballot_sync(FULL_MASK, threadIdx.x < WARPS_PER_BLOCK);
+    if (threadIdx.x < WARPS_PER_BLOCK)
       {
-        x = (threadIdx.x < numWarps) ? shared.uint64[threadIdx.x] : static_cast<uint64_t>(-1);
-        minWarp(x);
+        x = shared.uint64[threadIdx.x];
+#pragma unroll
+        for (int i = WARPS_PER_BLOCK/2; i > 0; i /= 2)
+          x = min(x, __shfl_down_sync(FULL_MASK, x, i));        
       }
 
     if (STATS && threadIdx.x == 0)
@@ -226,19 +245,23 @@ namespace  //  used only within this compilation unit, and only for device code.
   pair_t
   collectMinPair(GmpCudaBarrier& bar)
   {
-    uint64_t x;
+    uint64_t x = uint64_t{-1};
+    
     bar.collect(x);
-
+    
+    __syncthreads();
+    
     if (STATS && threadIdx.x == 0)
       stats.minBarrierCycles += clock();
 
-    int warpLane = threadIdx.x % warpSize;
-    int warpIdx = threadIdx.x / warpSize;
-    int numWarps =  (gridDim.x - 1) / warpSize + 1;
+    int warpLane = threadIdx.x % WARP_SZ;
+    int warpIdx = threadIdx.x / WARP_SZ;
+    int numWarps =  (gridDim.x - 1) / WARP_SZ + 1;
+    //unsigned int mask = __ballot_sync(FULL_MASK, threadIdx.x < gridDim.x);
     if (warpIdx < numWarps)
       {
-        if (threadIdx.x >= gridDim.x)
-          x = static_cast<uint64_t>(-1);
+ //       if (threadIdx.x >= gridDim.x)
+//          x = static_cast<uint64_t>(0xffffffffffffffffL);
         minWarp(x);
         if (warpLane == 0)
           shared.uint64[warpIdx] = x;
@@ -246,34 +269,35 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     __syncthreads();
 
-    //  There should only be a few values to find the min of now.
-    //  If there is more than one, put the min of these in slot 0.
-    switch  (numWarps)
+    //  If there is more than one value to find min of, put the min of these in slot 0.
+    if  (numWarps > 1)
       {
-        default:
-          if (threadIdx.x < warpSize)
-            {
-              x = (threadIdx.x < numWarps) ? shared.uint64[threadIdx.x] : static_cast<uint64_t>(-1);
-              minWarp(x);
-              __syncwarp();
-              if (threadIdx.x == 0)
-                {
-                    *shared.uint64 = x;
-                }
-            }
-          __syncthreads();
-          break;
-        case 2:
-          if (threadIdx.x == 0)
-            *shared.uint64 = min(shared.uint64[0], shared.uint64[1]);
-          __syncthreads();
-          break;
-        case 1:
-          break;
+//        if (threadIdx.x < WARP_SZ)
+//          {
+ //           x = (threadIdx.x < numWarps) ? shared.uint64[threadIdx.x] : static_cast<uint64_t>(-1);
+//            minWarp(x);
+//          }
+//        __syncthreads();
+        if (threadIdx.x == 0)
+          {
+            x = shared.uint64[0];
+            for (int i = 1; i < numWarps; i += 1)
+              if (shared.uint64[i] < x)
+                x = shared.uint64[i];
+          }
+        __syncthreads();
+        if (threadIdx.x == 0)
+          shared.uint64[0] = x;
+        __syncthreads();
       }
+      
+    x = shared.uint64[0];
+    
+    __syncthreads();
 
-    pair_t pair = *shared.pair;  // shared.pair is an alias for shared.uint64
-
+    pair_t pair;
+    pair.modulus = static_cast<uint32_t>(x & 0xffffffffL); 
+    pair.value   = static_cast<int32_t>(x >> 32);
     //  Restore original value and sign.
     pair.value += 1;
     if (pair.modulus & 1)
@@ -504,7 +528,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   void
   kernel(uint32_t* buf, size_t uSz, size_t vSz, GmpCudaBarrier bar, struct GmpCudaGcdStats* gStats = NULL)
   {
-    int totalModuliRemaining = 1 * blockDim.x * gridDim.x;
+    int totalModuliRemaining = blockDim.x * gridDim.x;
     int ubits = (uSz + 1) * 32;  // somewhat of an overestimate
     int vbits = (vSz + 1) * 32;  // same here
     
@@ -530,9 +554,9 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     //MGCD3: [reduction loop]
 
-    pair_t pair;
-    int t = 0;  //  The top of a stack of moduli for this thread.
+    bool   active = true;  //  Is the modulus owned by this thread active, or has it been retired?
 
+    pair_t pair;
     pair.value = (vq) ? toSigned(modDiv(uq, vq, q), q) : 0;
     pair.modulus = q.modulus;
     postMinPair<STATS>(pair, bar);
@@ -540,13 +564,17 @@ namespace  //  used only within this compilation unit, and only for device code.
     
     do
       {
-        pair_t newPair = {q.modulus, 0};
-        if (t >= 0 && equals(pair.modulus, q))  //  deactivate this modulus.
+        pair_t newPair;
+        newPair.modulus = q.modulus;
+        newPair.value = 0;
+        if (equals(pair.modulus, q))  //  deactivate this modulus.
           {
-            t -= 1;
+            //printf("Total moduli = %d, q = %u, value = %d, block = %d, thread = %d\n", totalModuliRemaining,  pair.modulus, pair.value, blockIdx.x, threadIdx.x);
+            //if (!active)
+              //printf("Deactivating already inactive modulus\n");
+            active = false;
           }
-        totalModuliRemaining -= 1;
-        if (t >= 0)
+        if (active)
           {
             uint32_t p = pair.modulus;
             if (p > q.modulus)  //  Bring within range.
@@ -555,9 +583,10 @@ namespace  //  used only within this compilation unit, and only for device code.
             uq = vq;
             vq = tq;
             newPair.value = (vq) ? toSigned(modDiv(uq, vq, q), q) : 0;
-            newPair.modulus = q.modulus;
           }
         postMinPair<STATS>(newPair, bar);
+        //if (blockIdx.x == 0 && threadIdx.x == 0) printf("Total moduli = %d, q = %u, value = %d\n", totalModuliRemaining,  pair.modulus, pair.value);
+        totalModuliRemaining -= 1;
         int tbits = ubits - (L - 1) + __ffs(abs(pair.value));  //  Conservative estimate--THIS NEEDS REVIEWED
         ubits = vbits;
         vbits = tbits;
@@ -571,7 +600,7 @@ namespace  //  used only within this compilation unit, and only for device code.
           *buf = 0;
         return;
       } 
-
+      
     //MGCD4: [Find SIGNED mixed-radix representation] Each "digit" is either positive or negative.
 
     if (STATS && threadIdx.x == 0)
@@ -579,16 +608,8 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     pair_t* pairs = (pair_t *)buf + 1;
 
-    if (t >= 0)
-      {
-        pair.value = toSigned(uq, q);
-        pair.modulus = q.modulus;
-      }
-    else
-      {
-        pair.value = 0;
-        pair.modulus = q.modulus;
-      }
+    pair.modulus = q.modulus;
+    pair.value = (active) ? toSigned(uq, q) : 0;
 
     postAnyPair<STATS>(pair, bar);
     pair = collectAnyPair<STATS>(bar);
@@ -597,9 +618,9 @@ namespace  //  used only within this compilation unit, and only for device code.
       {
         *pairs++ = pair;
         pair_t newPair = {q.modulus, 0};
-        if (t >= 0 && equals(pair.modulus, q))  //  deactivate modulus.
-          t -= 1;
-        if (t >= 0)
+        if (equals(pair.modulus, q))  //  deactivate modulus.
+          active = false;
+        if (active)
           {
             uint32_t p = pair.modulus;
             if (pair.modulus > q.modulus)  //  Bring within range.
@@ -609,20 +630,23 @@ namespace  //  used only within this compilation unit, and only for device code.
             newPair.modulus = q.modulus;
           }
         postAnyPair<STATS>(newPair, bar);
+        totalModuliRemaining -= 1;
+        ubits -= L - 1;
         pair = collectAnyPair<STATS>(bar);
       }
-    while (pair.value);
+    while (pair.value != 0 && totalModuliRemaining > ubits / (L - 1));
 
-
-    if (blockIdx.x | threadIdx.x)
+    if (blockIdx.x | threadIdx.x)  //  Final cleanup by just one thread.
       return;
 
-    *buf = pairs - reinterpret_cast<pair_t*>(buf);  // count of all the nonzero pairs, plus one more "pair" that includes buf[0] itself.
+    //  Return a count of all the nonzero pairs, plus one more "pair" that includes buf[0] itself.
+    //  If there aren't enough moduli to recover the result, return the highest uint32_t value.
+    *buf = (pair.value != 0) ? 0xffffffff : pairs - reinterpret_cast<pair_t*>(buf);
 
     if (STATS)
       {
         stats.mixedRadixCycles += clock();
-        stats.totalCycles += clock();
+        stats.totalCycles      += clock();
         *gStats = stats;
       }
   }
@@ -685,17 +709,36 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
 
   //  Execute a specific kernel, based on whether we are collecting statistics.
 
+#ifdef USE_COOP_GROUPS
+
+  void* args[5];
+  GmpCudaBarrier b = *barrier;
+  args[0] = &globalBuf;
+  args[1] = &uSz;
+  args[2] = &vSz;
+  args[3] = &b;
+  args[4] = &stats;
+  cudaLaunchCooperativeKernel
+    (
+      (void*)((collectStats) ? kernel<true> : kernel<false>),
+      gridSize, 
+      BLOCK_SZ,
+      args
+    );
+#else    
   if (collectStats)
     kernel<true> <<<gridSize, BLOCK_SZ>>>(globalBuf, uSz, vSz, *barrier, stats);
   else
     kernel<false><<<gridSize, BLOCK_SZ>>>(globalBuf, uSz, vSz, *barrier);
+#endif
 
   assert(cudaSuccess == cudaDeviceSynchronize());
 
   // Copy result from global memory and convert from mixed-radix to standard representation.
   assert(cudaSuccess == cudaMemcpy(buf, globalBuf, 2*sizeof(pair_t), cudaMemcpyDeviceToHost));  // Just size and 0th mixed-radix digit read now.
   
-  assert(buf[0] != 0);  //  buf[0] == 0 means we ran out of moduli.
+  assert(buf[0] != 0xffffffff);  //  buf[0] == 0xffffffff means we ran out of moduli somewhere in the recovery loop.
+  assert(buf[0] != 0);  //  buf[0] == 0 means we ran out of moduli somewhere in the reduction loop.
 
   if (buf[0] > 1)
     assert(cudaSuccess == cudaMemcpy(reinterpret_cast<pair_t*>(buf), globalBuf, buf[0] * sizeof(pair_t), cudaMemcpyDeviceToHost));//

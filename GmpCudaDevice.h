@@ -6,6 +6,7 @@
 #include <cuda_runtime.h>
 #include <sstream>
 #include "GmpCudaBarrier.h"
+//#define USE_COOP_GROUPS
 
 namespace GmpCuda
 {
