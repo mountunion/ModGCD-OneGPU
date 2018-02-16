@@ -63,7 +63,9 @@ namespace  //  used only within this compilation unit, and only for device code.
 
   constexpr unsigned int FULL_MASK       = 0xFFFFFFFF;  //  Used in sync functions.
 
-  constexpr int WARPS_PER_BLOCK = WARP_SZ / 4;
+  // Adjust WARPS_PER_BLOCK to change the block size--don't change BLOCK_SZ directly.
+  // WARPS_PER_BLOCK must evenly divide WARP_SZ.
+  constexpr int WARPS_PER_BLOCK = WARP_SZ / 2; 
   constexpr int BLOCK_SZ        = WARP_SZ * WARPS_PER_BLOCK;
 
   //  This type is used to pass back the gcd from the kernel as a list of pairs.
