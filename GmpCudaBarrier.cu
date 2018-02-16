@@ -37,11 +37,15 @@ GmpCudaBarrier& GmpCudaBarrier::operator= (const GmpCudaBarrier& orig)
   barrier = orig.barrier;
   row     = orig.row;
   copy    = true;
+  return *this;
+}
+
+void GmpCudaBarrier::reset()
+{
   //  On host, need to initialize the second row of the barrier to all zeros.
 #if !defined(__CUDA_ARCH__)
   assert(cudaSuccess == cudaMemset(const_cast<char *>(barrier) + pitch, 0, pitch));
 #endif
-  return *this;
 }
 
 GmpCudaBarrier& GmpCudaBarrier::operator= (GmpCudaBarrier&& orig)

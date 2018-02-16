@@ -27,6 +27,8 @@ namespace GmpCuda
     __host__ __device__ GmpCudaBarrier& operator=     (      GmpCudaBarrier&& orig);
     __host__ __device__                 GmpCudaBarrier(      GmpCudaBarrier&& orig);
     __host__ __device__                 GmpCudaBarrier(const GmpCudaBarrier&  orig);
+    
+    __host__            void            reset();
 
     //  Inlining these device functions for execution speed.
 

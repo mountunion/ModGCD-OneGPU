@@ -75,8 +75,10 @@ GmpCudaDevice::GmpCudaDevice(int n)
 
   assert(cudaSuccess == cudaMalloc(&stats, sizeof(struct GmpCudaGcdStats)));
 
+  initGcdOccupancy();
+  
   //  Limit the grid--and the barrier size--to the number of SMs * kernel occupancy.
-  initMaxGridSize();
+  maxGridSize = props.multiProcessorCount * gcdOccupancy;
   if (0 < n && n < maxGridSize)
     maxGridSize = n;
     

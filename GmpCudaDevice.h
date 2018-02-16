@@ -25,7 +25,7 @@ namespace GmpCuda
       anyBarrierCycles,
       minBarrierCycles,
       totalCycles;
-      int clockRateInKHz;
+    int clockRateInKHz;
   };
 
   class GmpCudaDevice
@@ -38,7 +38,8 @@ namespace GmpCuda
     int gridSize;
     int maxGridSize;
     bool collectStats;
-    void initMaxGridSize();
+    int gcdOccupancy;
+    void initGcdOccupancy();
   public:
     GmpCudaDevice(int);
     ~GmpCudaDevice();
