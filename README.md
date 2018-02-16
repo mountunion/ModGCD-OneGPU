@@ -3,7 +3,7 @@ Modular Integer GCD for one GPU
 
 See http://raider.mountunion.edu/~weberk/Spring2018Sabbatical/sabb-proposal-f2016.pdf for more information on the overall project, including references to additional resources.
 
-Requires CUDA 8 development kit or more recent.  (See https://developer.nvidia.com/cuda-downloads for most recent.)
+Requires CUDA 9 development kit or more recent.  (See https://developer.nvidia.com/cuda-downloads for most recent.)
 
 ## Build commands
 
