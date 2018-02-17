@@ -564,40 +564,32 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     bool   active = true;  //  Is the modulus owned by this thread active, or has it been retired?
 
-    pair_t pair;
-    pair.value = (vq) ? toSigned(modDiv(uq, vq, q), q) : 0;
-    pair.modulus = q.modulus;
-    postMinPair<STATS>(pair, bar);
+    pair_t pair, myPair;
+    myPair.value = (vq) ? toSigned(modDiv(uq, vq, q), q) : 0;
+    myPair.modulus = q.modulus;
+    postMinPair<STATS>(myPair, bar);
     pair = collectMinPair<STATS>(bar);
     
     do
       {
-        pair_t newPair;
-        newPair.modulus = q.modulus;
-        newPair.value = 0;
-        if (equals(pair.modulus, q))  //  deactivate this modulus.
-          {
-            //printf("Total moduli = %d, q = %u, value = %d, block = %d, thread = %d\n", totalModuliRemaining,  pair.modulus, pair.value, blockIdx.x, threadIdx.x);
-            //if (!active)
-              //printf("Deactivating already inactive modulus\n");
-            active = false;
-          }
+        uint32_t p, tq;
+        int tbits;
+        if (equals(pair.modulus, q))  //  Deactivate this modulus.
+          active = false, myPair.value = 0;
         if (active)
           {
-            uint32_t p = pair.modulus;
-            if (p > q.modulus)  //  Bring within range.
+            p = pair.modulus;
+            if (p > q.modulus)        //  Bring within range.
               p -= q.modulus;
-            uint32_t tq = modDiv(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
-            uq = vq;
-            vq = tq;
-            newPair.value = (vq) ? toSigned(modDiv(uq, vq, q), q) : 0;
+            tq = modDiv(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
+            myPair.value = (tq) ? toSigned(modDiv(vq, tq, q), q) : 0;
           }
-        postMinPair<STATS>(newPair, bar);
-        //if (blockIdx.x == 0 && threadIdx.x == 0) printf("Total moduli = %d, q = %u, value = %d\n", totalModuliRemaining,  pair.modulus, pair.value);
+        postMinPair<STATS>(myPair, bar);
+        if (active)
+          uq = vq, vq = tq;       
         totalModuliRemaining -= 1;
-        int tbits = ubits - (L - 1) + __ffs(abs(pair.value));  //  Conservative estimate--THIS NEEDS REVIEWED
-        ubits = vbits;
-        vbits = tbits;
+        tbits = ubits - (L - 1) + __ffs(abs(pair.value));  //  Conservative estimate--THIS NEEDS REVIEWED
+        ubits = vbits, vbits = tbits;
         pair = collectMinPair<STATS>(bar);
       }
     while (pair.value != 0 && totalModuliRemaining > ubits / (L - 1));
@@ -626,28 +618,26 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     pair_t* pairs = (pair_t *)buf + 1;
 
-    pair.modulus = q.modulus;
-    pair.value = (active) ? toSigned(uq, q) : 0;
+    //pair.modulus = q.modulus;
+    myPair.value = (active) ? toSigned(uq, q) : 0;
 
-    postAnyPair<STATS>(pair, bar);
+    postAnyPair<STATS>(myPair, bar);
     pair = collectAnyPair<STATS>(bar);
 
     do
       {
-        *pairs++ = pair;
-        pair_t newPair = {q.modulus, 0};
         if (equals(pair.modulus, q))  //  deactivate modulus.
-          active = false;
+          active = false, myPair.value = 0;
         if (active)
           {
             uint32_t p = pair.modulus;
             if (pair.modulus > q.modulus)  //  Bring within range.
               p -= q.modulus;
             uq = modDiv(modSub(uq, fromSigned(pair.value, q), q), p, q);
-            newPair.value = toSigned(uq, q);
-            newPair.modulus = q.modulus;
+            myPair.value = toSigned(uq, q);
           }
-        postAnyPair<STATS>(newPair, bar);
+        postAnyPair<STATS>(myPair, bar);
+        *pairs++ = pair;
         totalModuliRemaining -= 1;
         ubits -= L - 1;
         pair = collectAnyPair<STATS>(bar);
