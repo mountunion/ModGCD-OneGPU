@@ -5,14 +5,14 @@
   This version is for a single device and uses shuffle mechanism for the min operation.
   January 11, 2018.
 
-  Updated to run in CUDA 9.
-
-  Backported to CUDA 8 to run on Owens cluster in Ohio Supercomputer Center.
-  January 15, 2018.
+  Runs in CUDA 9.
 
   Put GmpCudaDevice::gcd in its own file == GmpCudaDevice-gcd.cu
   Added capability to use more than warpSize SMs.
   January 22, 2018
+  
+  Modified to allow large grid sizes up to maximum occupancy.
+  February 7-17, 2018.
 
   K. Weber--January, 2010             basic 16 bit version
             additional modifications: July, 2010
@@ -61,11 +61,11 @@ using namespace GmpCuda;
 namespace  //  used only within this compilation unit, and only for device code.
 {
 
-  constexpr unsigned int FULL_MASK       = 0xFFFFFFFF;  //  Used in sync functions.
+  constexpr unsigned int FULL_MASK = 0xFFFFFFFF;             //  Used in sync functions.
 
   // Adjust WARPS_PER_BLOCK to change the block size--don't change BLOCK_SZ directly.
   // WARPS_PER_BLOCK must evenly divide WARP_SZ.
-  constexpr int WARPS_PER_BLOCK = WARP_SZ / 2; 
+  constexpr int WARPS_PER_BLOCK = WARP_SZ / 4;               //  Provides most flexibility. 
   constexpr int BLOCK_SZ        = WARP_SZ * WARPS_PER_BLOCK;
 
   //  This type is used to pass back the gcd from the kernel as a list of pairs.
@@ -73,16 +73,6 @@ namespace  //  used only within this compilation unit, and only for device code.
 
   __shared__ GmpCudaGcdStats stats;
   
-  __device__
-  inline
-  void
-  initSharedStats()
-  {
-    memset(&stats, 0, sizeof(stats));
-    stats.blockDim = blockDim.x;
-    stats.totalCycles = -clock();
-  }
-
   inline
   unsigned int
   roundUp(unsigned int x, unsigned int b)
@@ -90,9 +80,8 @@ namespace  //  used only within this compilation unit, and only for device code.
     return ((x + (b - 1)) / b) * b;
   }
 
-  //  Chooses one of the value parameters from ALL threads such that value is positive.
-  //  Chosen value is returned as result.
-  //  If no such value is found, returns 0.
+  //  Posts to the barrier one of the pair parameters from ALL threads such that value is positive.
+  //  If no such value is found, a pair with a 0 value is posted.
   //  Preconditions:  all threads in block participate.
   template <bool STATS>
   __device__
@@ -169,7 +158,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     return sharedPair[winner];
   }
 
-  //  calculate min into all lanes of a warp.
+  //  Calculate min of x into lane 0 of warp.
   __device__
   void
   minWarp(uint64_t &x)
@@ -179,6 +168,10 @@ namespace  //  used only within this compilation unit, and only for device code.
       x = min(x, __shfl_down_sync(FULL_MASK, x, i));
   }
 
+  //  Posts pair which achieves the minimum of the absolute value 
+  //  of the value in the pairs on each SM to bar.
+  //  Precondition: modulus of each pair is odd and all threads participate.
+  //  Postcondition: bar is ready for collectMinPair to be called.
   template <bool STATS>
   __device__
   void
@@ -194,7 +187,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     //  Prepare a long int composed of the absolute value of pair.value in the high bits and pair.modulus in the low bits.
     //  Subtract 1 from pair.value to make 0 become "largest"; must restore at end.
     //  Store sign of pair.value in the low bit of pair.modulus, which should always be 1 since it's odd.
-    uint64_t x =uint64_t{-1};
+    uint64_t x = uint64_t{-1};
     
     if (pair.value != 0)
       {
@@ -210,7 +203,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     __syncthreads();
 
     //  Now find the min of the values in sharedX.
-    //  WARPS_PER_BLOCK must be a power of 2.
+    //  WARPS_PER_BLOCK must be a power of 2 <= WARP_SZ.
     if (threadIdx.x < WARPS_PER_BLOCK)
       {
         x = sharedX[threadIdx.x];
@@ -225,67 +218,71 @@ namespace  //  used only within this compilation unit, and only for device code.
     bar.post(x);
   }
 
-  //  Returns the x where the global minimum of x is achieved, for ALL threads.
-  //  Precondition: x != 0 && all threads participate && blockDim.x >= 2 * warpSize.
+  //  Returns the pair which achieves the global minimum of the absolute value 
+  //  of the value in all the pairs that have been posted to bar.
+  //  Precondition: postMinPair was previously called and all threads participate.
   template <bool STATS>
   __device__
   pair_t
   collectMinPair(GmpCudaBarrier& bar)
   {
     uint64_t x;
-    __shared__ uint64_t sharedX[WARP_SZ];
-    
     bar.collect(x);
     
-    __syncthreads();  // protect shared memory against last call to this function.
-        
     if (STATS && threadIdx.x == 0)
       stats.minBarrierCycles += clock();
 
-    int warpLane = threadIdx.x % WARP_SZ;
-    int warpIdx = threadIdx.x / WARP_SZ;
+    __shared__ uint64_t sharedX[WARP_SZ];
+    
+    __syncthreads();  // protect shared memory against last call to this function.
+        
     int numWarps =  (gridDim.x - 1) / WARP_SZ + 1;
 
-    if (warpIdx < numWarps)
+    if (threadIdx.x / WARP_SZ < numWarps)
       {
         if (threadIdx.x >= gridDim.x)
           x = static_cast<uint64_t>(-1);
         minWarp(x);
-        if (warpLane == 0)
-          sharedX[warpIdx] = x;
+        if (threadIdx.x % WARP_SZ == 0)
+          sharedX[threadIdx.x / WARP_SZ] = x;
       }
-
 
     switch  (numWarps)
       {
-        default:
+        default:  // For the unlikely cases where 256 < gridDim.x.
           __syncthreads();
           if (threadIdx.x < WARP_SZ)
             {
               x = (threadIdx.x < numWarps) ? sharedX[threadIdx.x] : static_cast<uint64_t>(-1);
 #pragma unroll
-             for (int i = WARPS_PER_BLOCK/2; i > 0; i /= 2)  //  assert(gridDim.x <= blockDim.x);
-               x = min(x, __shfl_down_sync(FULL_MASK, x, i));        
+              for (int i = WARPS_PER_BLOCK/2; i > 1; i /= 2)  //  assert(gridDim.x <= blockDim.x);
+                x = min(x, __shfl_down_sync(FULL_MASK, x, i));  
+              sharedX[threadIdx.x] = min(x, __shfl_down_sync(FULL_MASK, x, 1));                            
            }
-          if (threadIdx.x == 0)
-            sharedX[0] = x;
+          break;
+        //  Special cases will handle gridDim.x <= 256.
+        case 5: case 6: case 7: case 8:
+          __syncthreads();
+          if (threadIdx.x < 8)
+            {
+              x = (threadIdx.x < numWarps) ? sharedX[threadIdx.x] : static_cast<uint64_t>(-1);
+              x = min(x, __shfl_down_sync(0xFF, x, 4));        
+              x = min(x, __shfl_down_sync(0xFF, x, 2));  
+              sharedX[threadIdx.x] = min(x, __shfl_down_sync(0xFF, x, 1));      
+            }
           break;
         case 4:
           __syncthreads();
           if (threadIdx.x < 2)
             {
-              x = min(sharedX[threadIdx.x % 2], sharedX[threadIdx.x % 2 + 2]);
-              x = min(x, __shfl_down_sync(0x3, x, 1));
+              x = min(sharedX[threadIdx.x], sharedX[threadIdx.x + 2]);  
+              sharedX[threadIdx.x] = min(x, __shfl_down_sync(0x3, x, 1));
             }
-          if (threadIdx.x == 0)
-            sharedX[0] = x;
+          break;
         case 3:
           __syncthreads();
           if (threadIdx.x == 0)
-            {
-              x = min(x, sharedX[2]);
-              sharedX[0] = min(x, sharedX[1]);
-            }
+            sharedX[0] = min(min(x, sharedX[1]), sharedX[2]);
           break;
         case 2:
           __syncthreads();
@@ -542,7 +539,11 @@ namespace  //  used only within this compilation unit, and only for device code.
     //  The arithmetic used on the clock requires the exact same type size all the time.
     //  It uses the fact that the arithmetic is modulo 2^32.
     if (STATS && threadIdx.x == 0)
-      initSharedStats();
+      {
+        memset(&stats, 0, sizeof(stats));
+        stats.blockDim = blockDim.x;
+        stats.totalCycles = -clock();
+      }
 
     //MGCD1: [Find suitable moduli]
     modulus_t q = moduliList[blockDim.x * blockIdx.x + threadIdx.x];
