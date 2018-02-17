@@ -80,7 +80,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     return ((x + (b - 1)) / b) * b;
   }
 
-  //  Posts to the barrier one of the pair parameters from ALL threads such that value is positive.
+  //  Posts to the barrier one of the pair parameters from threadblock such that value is positive.
   //  If no such value is found, a pair with a 0 value is posted.
   //  Preconditions:  all threads in block participate.
   template <bool STATS>
@@ -113,10 +113,11 @@ namespace  //  used only within this compilation unit, and only for device code.
     bar.post(*(uint64_t *)(sharedPair + winner));
   }
 
-  //  Chooses one of the value parameters from ALL threads such that value is positive.
-  //  Chosen value is returned as result.
-  //  If no such value is found, returns 0.
+  //  Chooses one of the pairs in the barrier such that value is positive.
+  //  Chosen pair is returned as result.
+  //  If no such value is found, returns a pair with value == 0.
   //  Preconditions:  all threads in block participate.
+  //  Postcondition: every thread will have the same pair.
   template <bool STATS>
   static
   __device__
@@ -169,7 +170,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   }
 
   //  Posts pair which achieves the minimum of the absolute value 
-  //  of the value in the pairs on each SM to bar.
+  //  of the value in the pairs in each threadblock to bar.
   //  Precondition: modulus of each pair is odd and all threads participate.
   //  Postcondition: bar is ready for collectMinPair to be called.
   template <bool STATS>
@@ -311,6 +312,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     return pair;
   }
 
+  //  Determines whether the modulus is equal to x.
   __device__
   bool
   equals(uint32_t x, modulus_t &m)
@@ -327,6 +329,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     return a - b + (-(a < b) & m.modulus);
   }
 
+  //  Calculate x mod m, where x is 64 bits long.
   __device__
   uint32_t
   mod(uint64_t x, modulus_t m)
@@ -350,6 +353,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     return (x < 0) ? x + m.modulus : x;
   }
 
+  // Give x mod m as a signed value in the range [-modulus/2, modulus,2]
   __device__
   int32_t
   toSigned(uint32_t x, modulus_t m)
@@ -489,6 +493,7 @@ namespace  //  used only within this compilation unit, and only for device code.
       }
   }
 
+  // Calculate u/v mod m, in the range [0,m-1]
   __device__
   uint32_t
   modDiv(uint32_t u, uint32_t v, modulus_t m)
@@ -496,6 +501,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     return modMul(u, modInv(v, m), m);
   }
 
+  //  Calculate x mod m for a multiword unsigned integer x.
   __device__
   uint32_t
   modMP(uint32_t x[], size_t xSz, modulus_t m)
@@ -599,15 +605,11 @@ namespace  //  used only within this compilation unit, and only for device code.
       
     if (pair.value != 0)  //  Ran out of moduli--means initial estimate was wrong.
       {
-        if (blockIdx.x == 0 && threadIdx.x == 0)
-          {
-            buf[0] = 0, buf[1] = 0;
-            if (STATS)
-              {
-                stats.totalCycles += clock();
-                *gStats = stats;
-              }
-          }
+        if (blockIdx.x && threadIdx.x)
+          return;
+        buf[0] = 0, buf[1] = 0;
+        if (STATS)
+          stats.totalCycles += clock(), *gStats = stats;
         return;
       } 
       
@@ -652,7 +654,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     if (pair.value != 0) 
       buf[0] = 0, buf[1] = 1;
     else
-      *buf = pairs - reinterpret_cast<pair_t*>(buf);
+      buf[0] = pairs - reinterpret_cast<pair_t*>(buf);
     
     if (STATS)
       {
