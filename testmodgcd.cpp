@@ -27,11 +27,14 @@
 
   Invocation:
 
-    testmgcd* [ s ] [ i increment ] [ g grid_size ] num_bits [ gcd_size ]
+    testmgcd* [ s ] [ r ] [ i increment ] [ g grid_size ] num_bits [ gcd_size ]
 
   where
     *           is the size of the moduli in bits,
     s           is optional; it causes statistics on each modular gcd call to be printed.
+    r           is optional; it causes the test to use random numbers. If left off the test will use test input in /tests. 
+    If input does not exist in /tests for num_bits then random numbers will be generated and stored for future tests.
+    Default is false.
     i increment is optional; it gives the increment to be added to num_bits.
 		If it is left off, only one size is tested.
     g grid_size is optional; it can vary from 1 to the number of MPs on the device.
@@ -57,6 +60,10 @@
 #include <libgen.h>
 #include <stdlib.h>
 #include <time.h>
+#include <string>
+#include <stdio.h>
+#include <sys/stat.h>
+#include <gmp.h>
 
 inline uint64_t monotonicTime(void)
 {
@@ -104,6 +111,8 @@ main(int argc, char *argv[])
   unsigned int increment = 0;
   unsigned int gridSize = 0;
   bool collectStats = false;
+  bool random = false;
+  bool newFile = false;
 
   if (argc == 1)
     {
@@ -114,6 +123,12 @@ main(int argc, char *argv[])
   if (argv[1][0] == 's')
     {
       collectStats = true;
+      argc -= 1;
+      argv += 1;
+    }
+  if (argv[1][0] == 'r')
+    {
+      random = true;
       argc -= 1;
       argv += 1;
     }
@@ -205,20 +220,95 @@ main(int argc, char *argv[])
       uint64_t atime = 0LL;
       uint64_t mtime = 0LL;
       int numErrs = 0;
+
+      FILE * pFile;
+
+      if(!random)
+      {
+        const std::string folder = "tests";
+        struct stat sb;
+
+        if (!(stat(folder.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)))
+        {
+            //create directory
+            cout << "Tests Folder Does not exist. Creating tests\n";
+            const int dir_err = mkdir("tests", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+            if (-1 == dir_err)
+            {
+                printf("Error creating directory!\n");
+                exit(3);
+            }
+        }
+
+        std::string testFile;
+        testFile = folder + "/" + std::to_string(num_bits);
+        
+        if (!(stat(testFile.c_str(), &sb) == 0 && S_ISREG(sb.st_mode)))
+        {
+            //create file
+            cout << "Tests File Does not exist. Creating tests/" << num_bits << "\n";
+            
+            pFile = fopen (testFile.c_str(),"a+");
+            if (pFile==NULL)
+            {              
+              printf("Error creating file!\n");
+              exit(4);
+            }
+
+            newFile = true;
+        } 
+        else 
+        {
+          pFile = fopen (testFile.c_str(),"r");
+        }
+      }
+
       for (int i = 0; i < NUM_REPS; i += 1)
         {
-          do
-            mpz_urandomb(u, state, num_bits - num_g_bits);
-          while (mpz_cmp_ui(u, 0) == 0);
-          do
-            mpz_urandomb(v, state, num_bits - num_g_bits);
-          while (mpz_cmp_ui(v, 0) == 0);
-          do
-            mpz_urandomb(g, state, num_g_bits);
-          while (mpz_cmp_ui(g, 0) == 0);
-          mpz_mul(u, g, u);
-          mpz_mul(v, g, v);
+          if(random)
+          {
+            do
+              mpz_urandomb(u, state, num_bits - num_g_bits);
+            while (mpz_cmp_ui(u, 0) == 0);
+            do
+              mpz_urandomb(v, state, num_bits - num_g_bits);
+            while (mpz_cmp_ui(v, 0) == 0);
+            do
+              mpz_urandomb(g, state, num_g_bits);
+            while (mpz_cmp_ui(g, 0) == 0);
+            mpz_mul(u, g, u);
+            mpz_mul(v, g, v);
+          }
+          else
+          {
+            if(newFile)
+            {
+              do
+                mpz_urandomb(u, state, num_bits - num_g_bits);
+              while (mpz_cmp_ui(u, 0) == 0);
+              do
+                mpz_urandomb(v, state, num_bits - num_g_bits);
+              while (mpz_cmp_ui(v, 0) == 0);
+              do
+                mpz_urandomb(g, state, num_g_bits);
+              while (mpz_cmp_ui(g, 0) == 0);
+              mpz_mul(u, g, u);
+              mpz_mul(v, g, v);
 
+              mpz_out_str (pFile, 62, u);
+              fprintf(pFile, "\n");
+              
+              mpz_out_str (pFile, 62, v);
+              fprintf(pFile, "\n");
+              
+              fflush(pFile);
+            }
+            else
+            {
+              mpz_inp_str (u, pFile, 62);
+              mpz_inp_str (v, pFile, 62);
+            }
+          }
           mtime -= monotonicTime();
           mpz_gcd(g, u, v);
           mtime += monotonicTime();
@@ -255,6 +345,11 @@ main(int argc, char *argv[])
               numErrs += 1;
             }
         }
+
+      if(!random)
+      {
+        fclose (pFile);
+      }
 
       if (numErrs == 0)
         cout << "Modular gcd correct\n";

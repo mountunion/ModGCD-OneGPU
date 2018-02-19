@@ -60,3 +60,4 @@ clean:
 distclean: clean
 	rm createModuli || true
 	rm -rf moduli || true
+	rm -rf tests || true

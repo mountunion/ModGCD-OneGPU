@@ -9,3 +9,4 @@ testmodgcd22
 testmodgcd32
 createModuli
 moduli/
+tests/
