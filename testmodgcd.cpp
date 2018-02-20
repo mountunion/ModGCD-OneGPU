@@ -116,7 +116,7 @@ main(int argc, char *argv[])
 
   if (argc == 1)
     {
-      cout << "Usage: " << basename(argv[0]) << " [ s ] [ i increment ] [ g grid_size ] num_bits [ gcd_size ]" << endl;
+      cout << "Usage: " << basename(argv[0]) << " [ s ] [ r ] [ i increment ] [ g grid_size ] num_bits [ gcd_size ]" << endl;
       return 0;
     }
 
