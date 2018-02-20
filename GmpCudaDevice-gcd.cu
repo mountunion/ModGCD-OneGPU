@@ -170,13 +170,13 @@ namespace  //  used only within this compilation unit, and only for device code.
   }
 
   //  Posts pair which achieves the minimum of the absolute value 
-  //  of the value in the pairs in each threadblock to bar.
+  //  of the value in the active pairs in each threadblock to bar.
   //  Precondition: modulus of each pair is odd and all threads participate.
   //  Postcondition: bar is ready for collectMinPair to be called.
   template <bool STATS>
   __device__
   void
-  postMinPair(pair_t pair, GmpCudaBarrier &bar)
+  postMinPair(pair_t pair, bool active, GmpCudaBarrier &bar)
   {
     __shared__ uint64_t sharedX[WARP_SZ];
 
@@ -186,16 +186,15 @@ namespace  //  used only within this compilation unit, and only for device code.
       stats.minPositiveCycles -= clock();
       
     //  Prepare a long int composed of the absolute value of pair.value in the high bits and pair.modulus in the low bits.
-    //  Subtract 1 from pair.value to make 0 become "largest"; must restore at end.
     //  Store sign of pair.value in the low bit of pair.modulus, which should always be 1 since it's odd.
-    uint64_t x = uint64_t{-1};
-    
-    if (pair.value != 0)
+    uint64_t x;
+    if (active)
       {
-        x = static_cast<uint64_t>(abs(pair.value) - 1);
-        x <<= 32;
+        x = static_cast<uint64_t>(abs(pair.value)) << 32;  // took out - 1 from this line.
         x |= pair.modulus - (pair.value >= 0);
       }
+    else
+      x = UINT64_MAX;  //  Should never be the min.
  
     //  Find the smallest in each warp, and store in sharedX.
     minWarp(x);
@@ -219,13 +218,16 @@ namespace  //  used only within this compilation unit, and only for device code.
     bar.post(x);
   }
 
-  //  Returns the pair which achieves the global minimum of the absolute value 
-  //  of the value in all the pairs that have been posted to bar.
+  //  Returns (in pair) the pair which achieves the global minimum of the absolute value 
+  //  of the value in all the active pairs that have been posted to bar,
+  //  and true as the function result.
+  //  If all the posted values were from inactive threads, the result of the function
+  //  is false, and pair.value == 0.
   //  Precondition: postMinPair was previously called and all threads participate.
   template <bool STATS>
   __device__
-  pair_t
-  collectMinPair(GmpCudaBarrier& bar)
+  bool
+  collectMinPair(pair_t &pair, GmpCudaBarrier& bar)
   {
     uint64_t x;
     bar.collect(x);
@@ -297,11 +299,10 @@ namespace  //  used only within this compilation unit, and only for device code.
     __syncthreads();
     x = sharedX[0];
     
-    pair_t pair;
     pair.modulus = static_cast<uint32_t>(x & 0xFFFFFFFFL); 
     pair.value   = static_cast<int32_t>(x >> 32);
-    //  Restore original value and sign.
-    pair.value += 1;
+    //  Restore original sign.
+    //pair.value += 1;
     if (pair.modulus & 1)
       pair.value = -pair.value;
     pair.modulus |= 1;
@@ -309,7 +310,10 @@ namespace  //  used only within this compilation unit, and only for device code.
     if (STATS && threadIdx.x == 0)
       stats.minPositiveCycles += clock(), stats.reductionIterations += 1;
 
-    return pair;
+    if (x == UINT64_MAX)
+      pair.value = 0;
+    
+    return (x != UINT64_MAX);
   }
 
   //  Determines whether the modulus is equal to x.
@@ -568,38 +572,39 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     //MGCD3: [reduction loop]
 
-    bool   active = true;  //  Is the modulus owned by this thread active, or has it been retired?
+    bool active = true;  //  Is the modulus owned by this thread active, or has it been retired?
 
     pair_t pair, myPair;
-    myPair.value = (vq) ? toSigned(modDiv(uq, vq, q), q) : 0;
     myPair.modulus = q.modulus;
-    postMinPair<STATS>(myPair, bar);
-    pair = collectMinPair<STATS>(bar);
+    if (vq != 0)
+      myPair.value = toSigned(modDiv(uq, vq, q), q);
+    postMinPair<STATS>(myPair, (vq != 0), bar);
+    assert(collectMinPair<STATS>(pair, bar));
     
     do
       {
         uint32_t p, tq;
         int tbits;
         if (equals(pair.modulus, q))  //  Deactivate this modulus.
-          active = false, myPair.value = 0;
+          active = false;
         if (active)
           {
             p = pair.modulus;
             if (p > q.modulus)        //  Bring within range.
               p -= q.modulus;
             tq = modDiv(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
-            myPair.value = (tq) ? toSigned(modDiv(vq, tq, q), q) : 0;
+            if (tq != 0)
+              myPair.value = toSigned(modDiv(vq, tq, q), q);
           }
-        postMinPair<STATS>(myPair, bar);
+        postMinPair<STATS>(myPair, active && (tq != 0), bar);
         if (active)
           uq = vq, vq = tq;       
         totalModuliRemaining -= 1;
         tbits = ubits - (L - 1) + __ffs(abs(pair.value));  //  Conservative estimate--THIS NEEDS REVIEWED
         ubits = vbits, vbits = tbits;
-        pair = collectMinPair<STATS>(bar);
       }
-    while (pair.value != 0 && totalModuliRemaining > ubits / (L - 1));
-    
+    while (collectMinPair<STATS>(pair, bar) && totalModuliRemaining > ubits / (L - 1));
+     
     if (STATS && threadIdx.x == 0)
       stats.reductionCycles += clock();
       
