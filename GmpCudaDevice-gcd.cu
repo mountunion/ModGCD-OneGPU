@@ -76,14 +76,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   typedef struct __align__(8) {uint32_t modulus; int32_t value;} pair_t;
 
   __shared__ GmpCudaGcdStats stats;
-  
-  inline
-  unsigned int
-  roundUp(unsigned int x, unsigned int b)
-  {
-    return ((x + (b - 1)) / b) * b;
-  }
-
+    
   //  Posts to the barrier one of the pair parameters whose value is not VALUE_OUT_OF_RANGE.
   //  If no such value is found, a pair with a VALUE_OUT_OF_RANGE value is posted.
   //  Preconditions:  all threads in block participate.
@@ -140,7 +133,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     int winner;
     int warpLane = threadIdx.x % warpSize;
     int warpIdx = threadIdx.x / warpSize;
-    int numWarps = (gridDim.x -1) / warpSize + 1;
+    int numWarps = (gridDim.x - 1) / warpSize + 1;
     if (threadIdx.x < gridDim.x)
       {
         //  Using ballot so that every multiprocessor (deterministically) chooses the same pair(s).
@@ -510,7 +503,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   modMP(uint32_t x[], size_t xSz, modulus_t m)
   {
     __shared__ uint32_t sharedX[WARP_SZ];
-    unsigned long long int result = 0LL;
+    uint64_t result = uint64_t{0};
     
     __syncthreads();  // protect shared memory against last call to this function.
     
@@ -672,6 +665,29 @@ namespace  //  used only within this compilation unit, and only for device code.
 
 //  All that follows is host only code.
 
+// Round x up to the next larger multiple of b.
+// Precondition: T must be an integral type, and x >= 0.
+template <typename T>
+inline
+T
+roundUp(T x, int b)
+{
+//  return ((x + (b - 1)) / b) * b;
+  return ((x - 1) / b + 1) * b;
+}
+
+  
+//  Calculate the number of threads needed to compute the GCD.
+//  Number of moduli needed is approximated by a function of the number of bits in the larger input.
+//  Returns a multiple of BLOCK_SZ.
+inline
+int
+numModuliNeededFor(size_t numBits)
+{
+  constexpr float MODULI_MULTIPLIER = 1.6 - 0.015 * L; 
+  return roundUp(static_cast<int>(ceil(MODULI_MULTIPLIER * numBits / logf(numBits))), BLOCK_SZ);
+}
+
 void
 __host__
 GmpCudaDevice::initGcdOccupancy()
@@ -699,13 +715,9 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
   mpz_export(buf + uSz, &vSz, -1, sizeof(uint32_t), 0, 0, v);
   memset(buf + uSz + vSz, 0, sizeof(buf) - (uSz + vSz) * sizeof(uint32_t));
   
-  //  Number of moduli needed is approximated by a function of the number of bits in the larger input.
-  const float MODULI_MULTIPLIER = 1.6 - 0.014 * L;  //  Heuristically obtained formula.
-  float numModuliNeeded = ceil(MODULI_MULTIPLIER * ubits / logf(ubits));
+  int numModuliNeeded = numModuliNeededFor(ubits);
   
-  int blocksPerSM = static_cast<int>(ceil(numModuliNeeded / (props.multiProcessorCount * BLOCK_SZ)));
-  
-  gridSize = min(min(BLOCK_SZ, maxGridSize), min(blocksPerSM , gcdOccupancy) * props.multiProcessorCount);
+  gridSize = min(min(numModuliNeeded/BLOCK_SZ, maxGridSize), BLOCK_SZ);
      
   int numThreads = BLOCK_SZ * gridSize;
 
