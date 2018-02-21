@@ -111,14 +111,15 @@ namespace  //  used only within this compilation unit, and only for device code.
   }
 
   //  Chooses one of the pairs in the barrier that isn't VALUE_OUT_OF_RANGE;
-  //  chosen pair is returned in pair as result.
-  //  If there are no such values, a pair with value VALUE_OUT_OF_RANGE is returned.
+  //  chosen pair is returned in pair as result, and true is the function's return value.
+  //  If there are no such values, a pair with value VALUE_OUT_OF_RANGE is returned,
+  //  and false is the function's return value.
   //  Preconditions:  all threads in block participate.
   //  Postcondition: every thread will have the same pair.
   template <bool STATS>
   static
   __device__
-  void
+  bool
   collectAnyPair(pair_t& pair, GmpCudaBarrier &bar)
   {
     __shared__ pair_t sharedPair[WARP_SZ];
@@ -153,6 +154,8 @@ namespace  //  used only within this compilation unit, and only for device code.
       stats.anyPositiveCycles += clock(), stats.mixedRadixIterations += 1;
       
     pair = sharedPair[winner];
+    
+    return (pair.value != VALUE_OUT_OF_RANGE);
   }
 
   //  Calculate min of x into lane 0 of warp.
@@ -220,11 +223,13 @@ namespace  //  used only within this compilation unit, and only for device code.
 
   //  Returns, in pair, the pair which achieves the global minimum of the absolute value 
   //  of the value over all the pairs whose value is not VALUE_OUT_OF_RANGE that have been posted to bar,
-  //  If all the posted values were VALUE_OUT_OF_RANGE, a pair with value VALUE_OUT_OF_RANGE is returned.
+  //  and true is the return value of the function.
+  //  If all the posted values were VALUE_OUT_OF_RANGE, a pair with value VALUE_OUT_OF_RANGE is returned,
+  //  and false is the function's return value.
   //  Precondition: postMinPair was previously called and all threads participate.
   template <bool STATS>
   __device__
-  void
+  bool
   collectMinPair(pair_t &pair, GmpCudaBarrier& bar)
   {
     uint64_t x;
@@ -306,6 +311,8 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     if (STATS && threadIdx.x == 0)
       stats.minPositiveCycles += clock(), stats.reductionIterations += 1;
+      
+    return (pair.value != VALUE_OUT_OF_RANGE);
   }
 
   //  Determines whether the modulus is equal to x.
@@ -570,10 +577,8 @@ namespace  //  used only within this compilation unit, and only for device code.
     myPair.modulus = q.modulus;
     myPair.value = (vq == 0) ? VALUE_OUT_OF_RANGE : toSigned(modDiv(uq, vq, q), q);
     postMinPair<STATS>(myPair, bar);
-    collectMinPair<STATS>(pair, bar);
-    assert(pair.value != VALUE_OUT_OF_RANGE);
     
-    do
+    while (collectMinPair<STATS>(pair, bar) && totalModuliRemaining > ubits / (L - 2))
       {
         uint32_t p, tq;
         int tbits;
@@ -591,11 +596,9 @@ namespace  //  used only within this compilation unit, and only for device code.
         if (active)
           uq = vq, vq = tq;       
         totalModuliRemaining -= 1;
-        tbits = ubits - (L - 1) + __ffs(abs(pair.value));  //  Conservative estimate--THIS NEEDS REVIEWED
+        tbits = ubits - (L - 1) + __ffs(abs(pair.value));
         ubits = vbits, vbits = tbits;
-        collectMinPair<STATS>(pair, bar);
       }
-    while (pair.value != VALUE_OUT_OF_RANGE && totalModuliRemaining > ubits / (L - 1));
      
     if (STATS && threadIdx.x == 0)
       stats.reductionCycles += clock();
@@ -621,10 +624,8 @@ namespace  //  used only within this compilation unit, and only for device code.
       myPair.value = (uq == 0) ? VALUE_OUT_OF_RANGE : toSigned(uq, q);
 
     postAnyPair<STATS>(myPair, bar);
-    collectAnyPair<STATS>(pair, bar);
-    assert(pair.value != VALUE_OUT_OF_RANGE);
 
-    do
+    while (collectAnyPair<STATS>(pair, bar) && totalModuliRemaining > ubits / (L - 1))
       {
         if (equals(pair.modulus, q))  //  deactivate modulus.
           active = false, myPair.value = VALUE_OUT_OF_RANGE;
@@ -639,10 +640,8 @@ namespace  //  used only within this compilation unit, and only for device code.
         postAnyPair<STATS>(myPair, bar);
         *pairs++ = pair;
         totalModuliRemaining -= 1;
-        ubits -= L - 1;
-        collectAnyPair<STATS>(pair, bar);
+        ubits -= L - 2;
       }
-    while (pair.value != VALUE_OUT_OF_RANGE && totalModuliRemaining > ubits / (L - 1));
 
     if (blockIdx.x | threadIdx.x)  //  Final cleanup by just one thread.
       return;
