@@ -1,4 +1,19 @@
-//  GmpCudaBarrier.h
+/*  GmpCudaBarrier.h -- provides declarations for the GmpCudaBarrier class.
+
+  Constructor and other methods are declared in GmpCudaBarrier.cu.
+ 
+  Implemented in January, 2018.
+
+  K. Weber  University of Mount Union
+            weberk@mountunion.edu
+            
+  Based on initial work by
+  Authors: Justin Brew, Anthony Rizzo, Kenneth Weber
+           Mount Union College
+           June 25, 2009
+           
+  See GmpCudaDevice.cu for more information.
+*/
 
 #include <stdint.h>
 #ifdef USE_COOP_GROUPS

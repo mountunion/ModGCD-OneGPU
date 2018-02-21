@@ -1,29 +1,24 @@
 /* createModuli.cpp -- Program to generate moduli.h.
 
-  Implementation of the modular integer gcd algorithm.
+  Prepares a declaration for an array of moduli and ancillary data needed to compute inverses.
 
-  First, mod_init() must be called to initialize some tables needed by mod_gcd.
-  After that, mod_gcd(g, u, v) can be called to compute the gcd of u and v and put it in g.
-
-  K. Weber--January, 2010
-            additional modifications:       July, 2010
-            further simplifications:        February, 2011
-                                            Includes using float operations for modulus.
-            reorganized:                    March 8, 2011
-            eliminated parallel conversion
-               to standard
-              rep:                          June 22, 2011
-            final cleanup:                  July, 2011
-            modified to calculate inverses  July, 2012
-            modified to read L from cin	    Jan, 2013
-
-
+  See Cavagnino & Werbrouck
+      Efficient Algorithms for Integer Division by Constants Using Multiplication
+      The Computer Journal
+      Vol. 51 No. 4, 2008.
+      
   Based on initial work by
   Authors: Justin Brew, Anthony Rizzo, Kenneth Weber
            Mount Union College
            June 25, 2009
-
+           
+  Further revisions by 
+  K. Weber  University of Mount Union
+            weberk@mountunion.edu
+            
+  See GmpCudaDevice.cu for revision history.
 */
+
 #include <iostream>
 #include <cmath>
 #include <cstring>

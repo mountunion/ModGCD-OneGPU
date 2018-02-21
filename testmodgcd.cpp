@@ -5,25 +5,26 @@
   First, modgcdInit() must be called to initialize some tables needed by modgcd.
   After that, modgcd(g, u, v) can be called to compute the gcd of u and v and put it in g.
 
-  K. Weber--January, 2010
-            additional modifications: July, 2010
-            further simplifications:  February, 2011
-                                      Includes using float operations for modulus.
-            reorganized:              March 8, 2011
-            eliminated parallel
-            conversion to standard
-            rep:                      June 22, 2011
-            final cleanup:            July, 2011
+  Runs in CUDA 9.
+  
+  Based on initial work by
+  Authors:  Justin Brew, Anthony Rizzo, Kenneth Weber
+            Mount Union College
+            June 25, 2009
+
+  Further revisions by 
+  K. Weber  University of Mount Union
+            weberk@mountunion.edu
 
             made object-oriented:     August, 2012
-
-			made linux-oriented       August, 2015
-
-  Based on initial work by
-  Authors: Justin Brew, Anthony Rizzo, Kenneth Weber
-           Mount Union College
-           June 25, 2009
-
+            
+            made linux-oriented       August, 2015
+            
+  J. Brew   (please fill this in with what you want here, such as your company info and email address, Justin)
+  
+            extended test capability  February, 2018
+            to read test data from
+            files
 
   Invocation:
 

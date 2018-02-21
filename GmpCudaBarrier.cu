@@ -1,7 +1,16 @@
 /*  GmpCudaBarrier.cu -- provides a device wide synchronization barrier.
+    
+  Implemented in January, 2018.
 
-    K. Weber weberk@mountunion.edu
-    January 23, 2018
+  K. Weber  University of Mount Union
+            weberk@mountunion.edu
+            
+  Based on initial work by
+  Authors: Justin Brew, Anthony Rizzo, Kenneth Weber
+           Mount Union College
+           June 25, 2009
+           
+  See GmpCudaDevice.cu for more information.
 
 */
 
@@ -40,9 +49,10 @@ GmpCudaBarrier& GmpCudaBarrier::operator= (const GmpCudaBarrier& orig)
   return *this;
 }
 
+//  On host, need to initialize the second row of the barrier to all zeros
+//  via this method.
 void GmpCudaBarrier::reset()
 {
-  //  On host, need to initialize the second row of the barrier to all zeros.
 #if !defined(__CUDA_ARCH__)
   assert(cudaSuccess == cudaMemset(const_cast<char *>(barrier) + pitch, 0, pitch));
 #endif

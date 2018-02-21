@@ -1,51 +1,25 @@
-/*  GmpCudaDevice.cu -- provides API to the GPU kernel.
+/*  GmpCudaDevice-gcd.cu -- provides GmpCudaDevice::gcd method, as well as GPU kernel.
 
   Implementation of the modular integer gcd algorithm using L <= 32 bit moduli.
-
-  This version is for a single device and uses shuffle mechanism for the min operation.
-  January 11, 2018.
-
-  Runs in CUDA 9.
-
-  Put GmpCudaDevice::gcd in its own file == GmpCudaDevice-gcd.cu
-  Added capability to use more than warpSize SMs.
-  January 22, 2018
   
-  Modified to allow large grid sizes up to maximum occupancy.
-  February 7-17, 2018.
+  Reference: Weber, Trevisan, Martins 2005. A Modular Integer GCD algorithm
+             Journal of Algorithms 54, 2 (February, 2005) 152-167.
 
-  K. Weber--January, 2010             basic 16 bit version
-            additional modifications: July, 2010
-            further simplifications:  February, 2011
-                                      Includes using float operations for modulus.
-            reorganized:              March 8, 2011
-            eliminated parallel
-            conversion to standard
-            rep:                      June 22, 2011
-            final cleanup:            July, 2011
-
-            modified to allow up
-	          to 32 bit moduli.         June, 2012
-
-            made object-oriented:     August, 2012
-
-            more cleanup, including
-            limiting to arch >= 2.0
-            (anyPair uses __ballot):  January, 2013
-
-            Bug fixed in barrier.
-						Uses fixed number of
-					  threads, but arbitrary
-            number of moduli.
-            Also overlaps communi-
-            cation with computation.	March, 2014
-
-            Further cleanup           July, 2014
-
+             Note that there is an error in Fig. 2, which shows that the
+             final result can be recovered as the mixed radix representation
+             is calculated.  In actuality, all the mixed radix digits and moduli
+             must be computed before the actual GCD can be recovered.
+  
   Based on initial work by
-  Authors: Justin Brew, Anthony Rizzo, Kenneth Weber
-           Mount Union College
-           June 25, 2009
+  Authors:  Justin Brew, Anthony Rizzo, Kenneth Weber
+            Mount Union College
+            June 25, 2009
+
+  Further revisions by 
+  K. Weber  University of Mount Union
+            weberk@mountunion.edu
+            
+  See GmpCudaDevice.cu for revision history.
 */
 
 #include <cassert>

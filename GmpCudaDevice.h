@@ -1,4 +1,18 @@
-//  GmpCudaDevice.h
+/*  GmpCudaDevice.h -- provides declarations for the GmpCudaDevice class.
+
+  Constructor and other methods are declared in GmpCudaDevice.cu.
+  GmpCudaDevice::gcd is declared in GmpCudaDevice-gcd.cu.
+
+  Based on initial work by
+  Authors: Justin Brew, Anthony Rizzo, Kenneth Weber
+           Mount Union College
+           June 25, 2009
+           
+  K. Weber  University of Mount Union
+            weberk@mountunion.edu
+            
+  See GmpCudaDevice.cu for more information.
+*/
 
 #include <gmp.h>
 #include <stdint.h>
@@ -6,11 +20,16 @@
 #include <cuda_runtime.h>
 #include <sstream>
 #include "GmpCudaBarrier.h"
+
+//  Uncomment the following line if you want to use cooperative groups
+//  to perform grid-wide synchronization provided by CUDA 9.
+//  Otherwise, a simple custom busy-wait barrier is used.
+
 //#define USE_COOP_GROUPS
 
 namespace GmpCuda
 {
-  constexpr int WARP_SZ = 32;
+  constexpr int WARP_SZ = 32;  // GmpCudaDevice checks to see whether this is true.
   struct GmpCudaGcdStats
   {
     uint32_t

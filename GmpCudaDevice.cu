@@ -1,51 +1,89 @@
-/*  GmpCudaDevice.cu -- provides API to the GPU kernel.
+/*  GmpCudaDevice.cu -- provides constructor for GmpCudaDevice objects.
 
   Implementation of the modular integer gcd algorithm using L <= 32 bit moduli.
+  
+  Reference: Weber, Trevisan, Martins 2005. A Modular Integer GCD algorithm
+             Journal of Algorithms 54, 2 (February, 2005) 152-167.
 
-  This version is for a single device and uses shuffle mechanism for the min operation.
-  January 11, 2018.
+             Note that there is an error in Fig. 2, which shows that the
+             final result can be recovered as the mixed radix representation
+             is calculated.  In actuality, all the mixed radix digits and moduli
+             must be computed before the actual GCD can be recovered.
 
-  Updated to run in CUDA 9.
+  This version is for a single device.
 
-  Backported to CUDA 8 to run on Owens cluster in Ohio Supercomputer Center.
-  January 15, 2018.
+  Runs in CUDA 9.
+  
+  Based on initial work by
+  Authors:  Justin Brew, Anthony Rizzo, Kenneth Weber
+            Mount Union College
+            June 25, 2009
 
-  Added capability to use more than warpSize SMs.
-  January 22, 2018
-
-  K. Weber--January, 2010             basic 16 bit version
-            additional modifications: July, 2010
-            further simplifications:  February, 2011
-                                      Includes using float operations for modulus.
-            reorganized:              March 8, 2011
-            eliminated parallel
+  Further revisions by 
+  K. Weber  University of Mount Union
+            weberk@mountunion.edu
+            
+  History:  Basic 16 bit version      January, 2010 
+  
+            Additional modifications  July, 2010
+            
+            Further simplifications   February, 2011
+            including using float 
+            operations for modulus
+            
+            Reorganized               March 8, 2011
+            
+            Eliminated parallel       June 22, 2011
             conversion to standard
-            rep:                      June 22, 2011
-            final cleanup:            July, 2011
+            representation
+                                  
+            "Final" cleanup           July, 2011
 
-            modified to allow up
-	          to 32 bit moduli.         June, 2012
+            Modified to allow up      June, 2012
+	          to 32 bit moduli         
 
-            made object-oriented:     August, 2012
+            Made object-oriented      August, 2012
 
-            more cleanup, including
-            limiting to arch >= 2.0
-            (anyPair uses __ballot):  January, 2013
+            More cleanup              January, 2013
+            limited to arch >= 2.0
+            (anyPair uses __ballot)
 
-            Bug fixed in barrier.
+            Bug fixed in barrier      March, 2014
 						Uses fixed number of
 					  threads, but arbitrary
             number of moduli.
             Also overlaps communi-
-            cation with computation.	March, 2014
+            cation with computation.
 
             Further cleanup           July, 2014
+            
+            Ported to CUDA 9.         January 11, 2018
+            Uses shuffle mechanism
+            for the min operation
+            and ballot mechanism
+            to select a nonzero
+            value
 
-  Based on initial work by
-  Authors: Justin Brew, Anthony Rizzo, Kenneth Weber
-           Mount Union College
-           June 25, 2009
+            Put GmpCudaDevice::gcd    January 22, 2018
+            in its own file named
+            GmpCudaDevice-gcd.cu
+            Added capability to use 
+            more than warpSize SMs.
+            
+            Split out GmpCudaBarrier  January, 2018
+            in files GmpCudaBarrier.h
+            and GmpCudaBarrier.cu
+
+            Modified to allow large   February 17, 2018
+            grid sizes up to maximum 
+            occupancy.  
 */
+
+//  Enforce use of CUDA 9 at compile time.
+#if defined(CUDART_VERSION) && CUDART_VERSION >= 9000
+#else
+#error Requires CUDA 9 or more recent
+#endif
 
 #include <cassert>
 #include "GmpCudaDevice.h"
@@ -58,10 +96,6 @@ using namespace GmpCuda;
 //  Also initializes the global barrier.
 GmpCudaDevice::GmpCudaDevice(int n)
 {
-#if defined(CUDART_VERSION) && CUDART_VERSION >= 9000
-#else
-  assert(false);  //  Require CUDA 9.
-#endif
 
   collectStats = false;  //  default.
 
