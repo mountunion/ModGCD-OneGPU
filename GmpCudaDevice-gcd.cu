@@ -578,7 +578,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     myPair.value = (vq == 0) ? VALUE_OUT_OF_RANGE : toSigned(modDiv(uq, vq, q), q);
     postMinPair<STATS>(myPair, bar);
     
-    while (collectMinPair<STATS>(pair, bar) && totalModuliRemaining > ubits / (L - 2))
+    while (collectMinPair<STATS>(pair, bar) && totalModuliRemaining * (L - 2) > ubits)
       {
         uint32_t p, tq;
         int tbits;
@@ -625,7 +625,7 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     postAnyPair<STATS>(myPair, bar);
 
-    while (collectAnyPair<STATS>(pair, bar) && totalModuliRemaining > ubits / (L - 1))
+    while (collectAnyPair<STATS>(pair, bar) && totalModuliRemaining > 0)
       {
         if (equals(pair.modulus, q))  //  deactivate modulus.
           active = false, myPair.value = VALUE_OUT_OF_RANGE;
@@ -640,7 +640,6 @@ namespace  //  used only within this compilation unit, and only for device code.
         postAnyPair<STATS>(myPair, bar);
         *pairs++ = pair;
         totalModuliRemaining -= 1;
-        ubits -= L - 2;
       }
 
     if (blockIdx.x | threadIdx.x)  //  Final cleanup by just one thread.
