@@ -22,6 +22,12 @@
   See GmpCudaDevice.cu for revision history.
 */
 
+//  Enforce use of CUDA 9 at compile time.
+#if defined(CUDART_VERSION) && CUDART_VERSION >= 9000
+#else
+#error Requires CUDA 9 or more recent
+#endif
+
 #include <cassert>
 #include "GmpCudaDevice.h"
 using namespace GmpCuda;
