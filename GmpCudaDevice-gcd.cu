@@ -52,6 +52,10 @@ namespace  //  used only within this compilation unit, and only for device code.
   constexpr int WARPS_PER_BLOCK = WARP_SZ / 4;               //  Provides most flexibility. 
   constexpr int BLOCK_SZ        = WARP_SZ * WARPS_PER_BLOCK;
 
+  //  If integer division on 32-bit integers ever becomes fast on NVidia GPUs, we
+  //  can use the code that this constant turns off.
+  constexpr bool INT_DIVIDE_IS_FAST = false;
+
   //  This type is used to pass back the gcd from the kernel as a list of pairs.
   typedef struct __align__(8) {uint32_t modulus; int32_t value;} pair_t;
 
@@ -383,7 +387,11 @@ namespace  //  used only within this compilation unit, and only for device code.
         x1 = 0, y1 = m.modulus;
         x2 = 1, y2 = v;
 
-        const bool INT_DIVIDE_IS_FAST = false;
+        //  We have two options here; if integer division is relatively, fast, use it.
+        //  Otherwise, use binary extended GCD algorithm to work x1, y1, x2, y2 down to the
+        //  point that they WILL fit into single precision.
+        //  Double-precision appears to be way too expensive, BTW.
+
         if (INT_DIVIDE_IS_FAST)
           {
             do
@@ -402,6 +410,9 @@ namespace  //  used only within this compilation unit, and only for device code.
             return m.modulus + x1;  //  Answer in x1 is negative.
           }
         else  //  Non-divergent code to reduce y1 and y2 to fit into floats.
+              //  The code follows the basic outlines of the extended binary GCD algorithm.
+              //  See Knuth, the Art of Computer Programming: Seminumerical Algorithms 3/e
+              //  Section 4.5.2, Exercise 39 and solution.
           {
             y1 <<= (32 - L), y2 <<= (32 - L);
             int j = __clz(y2);                          //  First eliminate y1's MSB
@@ -413,7 +424,7 @@ namespace  //  used only within this compilation unit, and only for device code.
               y1 = y - y1, x1 = x - x1;
             j = __clz(y1);
             y = y1 << j, x = x1 << j;
-            if ((int32_t)y2 < 0)                         //  y2's MSB is still set, so eliminate it.
+            if (static_cast<int32_t>(y2) < 0)                         //  y2's MSB is still set, so eliminate it.
               {
                 if (y <= y2)
                   y2 = y2 - y, x2 = x2 - x;
@@ -427,7 +438,7 @@ namespace  //  used only within this compilation unit, and only for device code.
 
                 j = __clz(y2);                           //  First eliminate y1's MSB
                 y = y2 << j, x = x2 << j;
-                if ((int32_t)y1 < 0 && y2)
+                if (static_cast<int32_t>(y1) < 0 && y2)
                   {
                     if (y <= y1)
                       y1 = y1 - y, x1 = x1 - x;
@@ -437,7 +448,7 @@ namespace  //  used only within this compilation unit, and only for device code.
 
                 j = __clz(y1);
                 y = y1 << j, x = x1 << j;
-                if ((int32_t)y2 < 0 && y1)
+                if (static_cast<int32_t>(y2) < 0 && y1)
                   {
                     if (y <= y2)
                       y2 = y2 - y, x2 = x2 - x;
@@ -456,19 +467,19 @@ namespace  //  used only within this compilation unit, and only for device code.
             if (f2 > f1)
               {
                 q = truncf(__fdividef(f2, f1));
-                x2 -= x1*(int32_t)q;
+                x2 -= x1*static_cast<int32_t>(q);
                 f2 -= f1*q;
               }
 
             while (f2)
               {
                 q = truncf(__fdividef(f1, f2));
-                x1 -= x2*(int32_t)q;
+                x1 -= x2*static_cast<int32_t>(q);
                 f1 -= f2*q;
                 if (f1 == 0)
                   return fromSigned(x2, m);
                 q = truncf(__fdividef(f2, f1));
-                x2 -= x1*(int32_t)q;
+                x2 -= x1*static_cast<int32_t>(q);
                 f2 -= f1*q;
               }
             return fromSigned(x1, m);
