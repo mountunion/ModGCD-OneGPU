@@ -42,7 +42,7 @@ namespace  //  used only within this compilation unit, and only for device code.
 {
   constexpr unsigned FULL_MASK          = 0xFFFFFFFF;           //  Used in sync functions.
   constexpr uint64_t MODULUS_MASK       = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
-  constexpr int32_t  VALUE_OUT_OF_RANGE = INT32_MIN;            //  Signals an invalid pair.
+  constexpr int32_t  MOD_INFINITY       = INT32_MIN;            //  Larger than any modulur value
   constexpr uint32_t GCD_KERNEL_ERROR   = 0;                    //  Error in the gcd kernel.
   constexpr uint32_t GCD_REDUX_ERROR    = 0;                    //  Error in reduction phase.
   constexpr uint32_t GCD_RECOVERY_ERROR = 1;                    //  Error in recovery phase.
@@ -61,13 +61,13 @@ namespace  //  used only within this compilation unit, and only for device code.
 
   __shared__ GmpCudaGcdStats stats;
     
-  //  Posts to the barrier one of the pair parameters whose value is not VALUE_OUT_OF_RANGE.
-  //  If no such value is found, a pair with a VALUE_OUT_OF_RANGE value is posted.
+  //  Posts to the barrier one of the pair parameters whose value is not 0.
+  //  If no such value is found, a pair with a 0 value is posted.
   //  Preconditions:  all threads in block participate.
   template <bool STATS>
   __device__
   void
-  postAnyPair(pair_t pair, GmpCudaBarrier &bar)
+  postAnyPairPriorityNonzero(pair_t pair, GmpCudaBarrier &bar)
   {
      __shared__ pair_t sharedPair[WARP_SZ];
      
@@ -76,8 +76,8 @@ namespace  //  used only within this compilation unit, and only for device code.
     if (STATS && threadIdx.x == 0)
       stats.anyPositiveCycles -= clock();
 
-    int winner = max(0, __ffs(__ballot_sync(FULL_MASK, pair.value != VALUE_OUT_OF_RANGE)) - 1);
-    //  in case there is no winner, use the VALUE_OUT_OF_RANGE from warpLane 0.
+    int winner = max(0, __ffs(__ballot_sync(FULL_MASK, pair.value != 0)) - 1);
+    //  in case there is no winner, use the 0 from warpLane 0.
     if (winner == threadIdx.x % warpSize)
       sharedPair[threadIdx.x / warpSize] = pair;
 
@@ -86,7 +86,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     int numWarps = (blockDim.x - 1) / warpSize + 1;
 
     if (threadIdx.x < numWarps)
-       winner = max(0, __ffs(__ballot_sync(FULL_MASK, sharedPair[threadIdx.x].value != VALUE_OUT_OF_RANGE)) - 1);
+       winner = max(0, __ffs(__ballot_sync(FULL_MASK, sharedPair[threadIdx.x].value != 0)) - 1);
 
     if (STATS && threadIdx.x == 0)
       stats.anyBarrierCycles -= clock();
@@ -94,17 +94,16 @@ namespace  //  used only within this compilation unit, and only for device code.
     bar.post(*reinterpret_cast<uint64_t *>(sharedPair + winner));
   }
 
-  //  Chooses one of the pairs in the barrier that isn't VALUE_OUT_OF_RANGE;
-  //  chosen pair is returned in pair as result, and true is the function's return value.
-  //  If there are no such values, a pair with value VALUE_OUT_OF_RANGE is returned,
-  //  and false is the function's return value.
+  //  Chooses one of the pairs in the barrier that isn't 0;
+  //  chosen pair is returned in pair as result.
+  //  If there are no nonzero values, a pair with value 0 is returned.
   //  Preconditions:  all threads in block participate.
   //  Postcondition: every thread will have the same pair.
   template <bool STATS>
   static
   __device__
   void
-  collectAnyPair(pair_t& pair, GmpCudaBarrier &bar)
+  collectAnyPairPriorityNonzero(pair_t& pair, GmpCudaBarrier &bar)
   {
     __shared__ pair_t sharedPair[WARP_SZ];
     
@@ -122,8 +121,8 @@ namespace  //  used only within this compilation unit, and only for device code.
     if (threadIdx.x < gridDim.x)
       {
         //  Using ballot so that every multiprocessor (deterministically) chooses the same pair(s).
-        winner = max(0, __ffs(__ballot_sync(FULL_MASK, pair.value != VALUE_OUT_OF_RANGE)) - 1);
-        //  in case there is no winner, use the VALUE_OUT_OF_RANGE from warpLane 0.
+        winner = max(0, __ffs(__ballot_sync(FULL_MASK, pair.value != 0)) - 1);
+        //  in case there is no winner, use the 0 from warpLane 0.
         if (winner == warpLane)
           sharedPair[warpIdx] = pair;
       }
@@ -132,7 +131,7 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     //  All warps do this and get common value for winner.
     //  Would it be faster to have 1 warp do this and put in shared memory for all?
-    winner = max(0, __ffs(__ballot_sync(FULL_MASK, warpLane < numWarps && sharedPair[warpLane].value != VALUE_OUT_OF_RANGE)) - 1);
+    winner = max(0, __ffs(__ballot_sync(FULL_MASK, warpLane < numWarps && sharedPair[warpLane].value != 0)) - 1);
 
     if (STATS && threadIdx.x == 0)
       stats.anyPositiveCycles += clock(), stats.mixedRadixIterations += 1;
@@ -151,18 +150,17 @@ namespace  //  used only within this compilation unit, and only for device code.
       x = min(x, __shfl_down_sync(FULL_MASK, x, i));
   }
   
-  //  Calculates abs(x), except that INT32_MIN is not changed.
+  //  Calculates abs(x), except that MOD_INFINITY == INT32_MIN is not changed.
   __device__
   inline
   uint64_t
-  fixedPtAbs(int32_t x)
+  modAbs(int32_t x)
   {
     return (x < 0) ? ~x + 1 : x;
   }
 
   //  Posts pair which achieves the minimum of the absolute value 
-  //  of all pairs whose value isn't VALUE_OUT_OF_RANGE in each threadblock to bar.
-  //  If no such pair exists, a pair with value VALUE_OUT_OF_RANGE is posted.
+  //  of all pairs in each threadblock to bar.
   //  Precondition: modulus of each pair is odd and all threads participate.
   //  Postcondition: bar is ready for collectMinPair to be called.
   template <bool STATS>
@@ -179,7 +177,7 @@ namespace  //  used only within this compilation unit, and only for device code.
       
     //  Prepare a long int composed of the absolute value of pair.value in the high bits and pair.modulus in the low bits.
     //  Store sign of pair.value in the low bit of pair.modulus, which should always be 1 since it's odd.
-    uint64_t x = (fixedPtAbs(pair.value) << 32) | (pair.modulus - (pair.value >= 0)); 
+    uint64_t x = (modAbs(pair.value) << 32) | (pair.modulus - (pair.value >= 0)); 
  
     //  Find the smallest in each warp, and store in sharedX.
     minWarp(x);
@@ -204,10 +202,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   }
 
   //  Returns, in pair, the pair which achieves the global minimum of the absolute value 
-  //  of the value over all the pairs whose value is not VALUE_OUT_OF_RANGE that have been posted to bar,
-  //  and true is the return value of the function.
-  //  If all the posted values were VALUE_OUT_OF_RANGE, a pair with value VALUE_OUT_OF_RANGE is returned,
-  //  and false is the function's return value.
+  //  of the value over all the pairs that have been posted to bar.
   //  Precondition: postMinPair was previously called and all threads participate.
   template <bool STATS>
   __device__
@@ -288,7 +283,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     pair.value   = static_cast<int32_t>(x >> 32);
     //  Restore original sign.
     if (pair.modulus & 1)
-      pair.value = ~pair.value + 1;  // Should leave VALUE_OUT_OF_RANGE unchanged.
+      pair.value = ~pair.value + 1;  // Should leave MOD_INFINITY unchanged.
     pair.modulus |= 1;
 
     if (STATS && threadIdx.x == 0)
@@ -562,7 +557,7 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     pair_t pair, myPair;
     myPair.modulus = q.modulus;
-    myPair.value = (vq == 0) ? VALUE_OUT_OF_RANGE : toSigned(modDiv(uq, vq, q), q);
+    myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv(uq, vq, q), q);
     postMinPair<STATS>(myPair, bar);
     collectMinPair<STATS>(pair, bar);
     
@@ -571,14 +566,14 @@ namespace  //  used only within this compilation unit, and only for device code.
         uint32_t p, tq;
         int tbits;
         if (equals(pair.modulus, q))  //  Deactivate this modulus.
-          active = false, myPair.value = VALUE_OUT_OF_RANGE;
+          active = false, myPair.value = MOD_INFINITY;
         if (active)
           {
             p = pair.modulus;
             if (p > q.modulus)        //  Bring within range.
               p -= q.modulus;
             tq = modDiv(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
-            myPair.value = (tq == 0) ? VALUE_OUT_OF_RANGE : toSigned(modDiv(vq, tq, q), q);
+            myPair.value = (tq == 0) ? MOD_INFINITY : toSigned(modDiv(vq, tq, q), q);
           }
         postMinPair<STATS>(myPair, bar);
         if (active)
@@ -586,22 +581,21 @@ namespace  //  used only within this compilation unit, and only for device code.
         totalModuliRemaining -= 1;
         tbits = ubits - (L - 1) + __ffs(abs(pair.value));
         ubits = vbits, vbits = tbits;
+        if (totalModuliRemaining * (L - 2) <= ubits)  //  Ran out of moduli--means initial estimate was wrong.
+          {
+            if (blockIdx.x && threadIdx.x)
+              return;
+            buf[0] = GCD_KERNEL_ERROR, buf[1] = GCD_REDUX_ERROR;
+            if (STATS)
+              stats.reductionCycles += clock(), stats.totalCycles += clock(), *gStats = stats;
+            return;
+          }        
         collectMinPair<STATS>(pair, bar);
       }
-    while (pair.value != VALUE_OUT_OF_RANGE && totalModuliRemaining * (L - 2) > ubits);
+    while (pair.value != MOD_INFINITY);
      
     if (STATS && threadIdx.x == 0)
       stats.reductionCycles += clock();
-      
-    if (pair.value != VALUE_OUT_OF_RANGE)  //  Ran out of moduli--means initial estimate was wrong.
-      {
-        if (blockIdx.x && threadIdx.x)
-          return;
-        buf[0] = GCD_KERNEL_ERROR, buf[1] = GCD_REDUX_ERROR;
-        if (STATS)
-          stats.totalCycles += clock(), *gStats = stats;
-        return;
-      } 
       
     //MGCD4: [Find SIGNED mixed-radix representation] Each "digit" is either positive or negative.
 
@@ -610,37 +604,38 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     pair_t* pairs = (pair_t *)buf + 1;
 
-    if (active)
-      myPair.value = (uq == 0) ? VALUE_OUT_OF_RANGE : toSigned(uq, q);
+    myPair.value = (active) ? toSigned(uq, q) : 0;  //  Inactive threads should have low priority.
 
-    postAnyPair<STATS>(myPair, bar);
-    collectAnyPair<STATS>(pair, bar);
+    postAnyPairPriorityNonzero<STATS>(myPair, bar);
+    collectAnyPairPriorityNonzero<STATS>(pair, bar);
 
     do
       {
         if (equals(pair.modulus, q))  //  deactivate modulus.
-          active = false, myPair.value = VALUE_OUT_OF_RANGE;
+          active = false, myPair.value = 0;
         if (active)
           {
             uint32_t p = pair.modulus;
             if (pair.modulus > q.modulus)  //  Bring within range.
               p -= q.modulus;
             uq = modDiv(modSub(uq, fromSigned(pair.value, q), q), p, q);
-            myPair.value = (uq == 0) ? VALUE_OUT_OF_RANGE : toSigned(uq, q);  //  Only look for nozero values.
+            myPair.value = toSigned(uq, q);
           }
-        postAnyPair<STATS>(myPair, bar);
+        postAnyPairPriorityNonzero<STATS>(myPair, bar);
         *pairs++ = pair;
         totalModuliRemaining -= 1;
-        collectAnyPair<STATS>(pair, bar);
+        if (totalModuliRemaining <= 0)  //  Something went wrong.
+          break;
+        collectAnyPairPriorityNonzero<STATS>(pair, bar);
       }
-    while (pair.value != VALUE_OUT_OF_RANGE && totalModuliRemaining > 0);
+    while (pair.value != 0);
 
     if (blockIdx.x | threadIdx.x)  //  Final cleanup by just one thread.
       return;
 
     //  Return a count of all the nonzero pairs, plus one more "pair" that includes buf[0] itself.
     //  If there aren't enough moduli to recover the result, return error codes.
-    if (pair.value != VALUE_OUT_OF_RANGE) 
+    if (pair.value != 0) 
       buf[0] = GCD_KERNEL_ERROR, buf[1] = GCD_RECOVERY_ERROR;
     else
       buf[0] = pairs - reinterpret_cast<pair_t*>(buf);
@@ -663,7 +658,6 @@ inline
 T
 roundUp(T x, int b)
 {
-//  return ((x + (b - 1)) / b) * b;
   return ((x - 1) / b + 1) * b;
 }
 
