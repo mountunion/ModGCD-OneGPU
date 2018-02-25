@@ -20,7 +20,7 @@
             
             made linux-oriented       August, 2015
             
-  J. Brew   (please fill this in with what you want here, such as your company info and email address, Justin)
+  J. Brew   jbrew5662@gmail.com
   
             extended test capability  February, 2018
             to read test data from
@@ -242,12 +242,12 @@ main(int argc, char *argv[])
         }
 
         std::string testFile;
-        testFile = folder + "/" + std::to_string(num_bits);
+        testFile = folder + "/" + std::to_string(num_bits) + "-" + std::to_string(num_g_bits);
         
         if (!(stat(testFile.c_str(), &sb) == 0 && S_ISREG(sb.st_mode)))
         {
             //create file
-            cout << "Tests File Does not exist. Creating tests/" << num_bits << "\n";
+            cout << "Tests File Does not exist. Creating tests/" << num_bits << "-" << num_g_bits << "\n";
             
             pFile = fopen (testFile.c_str(),"a+");
             if (pFile==NULL)
