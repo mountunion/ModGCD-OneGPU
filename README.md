@@ -16,5 +16,5 @@ The following will clean out all but the `createModuli` executable and the `modu
 The following will clean out everything but original source files:
 > `make distclean`
 
-The following command is used to build a somewhat more portable executable, than is used for timing on several similar systems:
+The following command is used to build a somewhat more portable executable, that is used for timing on several similar systems:
 > `make static`
