@@ -5,9 +5,17 @@
 ##  Requires CUDA 9 or more recent to be installed on your system.
 ##  If Gnu MP is not installed on your system, you will also need to provide a Gnu MP library.
 ##
-##  K. Weber weberk@mountunion.edu
 ##  J. Brew jbrew5662@gmail.com
+##  K. Weber weberk@mountunion.edu
 ##  February 26, 2018
+
+##  To create executables for which the C++ runtime library and the Gnu MP library are
+##  statically linked, execute make as follows:
+##
+##      make static
+##
+##  This is known to work on Ubuntu 16.04 with the gnu development toolchain.
+##  Linking this way makes the executable more portable.
 
 GMPL=-lgmp
 
@@ -17,16 +25,25 @@ CXX=g++
 CXXFLAGS=--std c++11 -O2 -m64
 
 NVCC=nvcc
-NVCCFLAGS= $(GMPI) -g -O2 --std c++11 --use_fast_math -m64 $(CUDA_ARCH)
+NVCCFLAGS= -g -O2 --std c++11 --use_fast_math -m64 $(CUDA_ARCH)
 
 LD=nvcc
-LDFLAGS=$(CUDA_ARCH)
+LDFLAGS=$(CUDA_ARCH) $(CPPL)
 
 GCD_KERN_FLAGS=-maxrregcount 32 --device-c
 
 .PHONY: all clean distclean
 
 all: testmodgcd22 testmodgcd27 testmodgcd32
+
+##
+## Used to generate eecutables for the timing reported in paper(s).
+## The same executable can be run on all three target systems.
+##
+static:
+	echo "Making portable executables "
+	$(MAKE) distclean
+	$(MAKE) GMPL=-l:libgmp.a CPPL="-Xcompiler -static-libstdc++"
 
 testmodgcd22: testmodgcd.o GmpCudaDevice-gcd22.o GmpCudaDevice.o GmpCudaBarrier.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)

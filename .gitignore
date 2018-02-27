@@ -6,6 +6,7 @@
 *.fatbin
 *.o
 testmodgcd22
+testmodgcd27
 testmodgcd32
 createModuli
 moduli/
