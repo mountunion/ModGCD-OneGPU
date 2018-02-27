@@ -91,7 +91,7 @@ createModuli: createModuli.cpp
 	$(CXX) $(CXXFLAGS) $^ $(GMPL) -o $@
 
 clean:
-	rm *.o testmodgcd22 testmodgcd32 || true
+	rm *.o testmodgcd22 testmodgcd27 testmodgcd32 || true
 
 distclean: clean
 	rm createModuli || true
