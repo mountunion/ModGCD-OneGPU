@@ -5,6 +5,7 @@
 *.cubin
 *.fatbin
 *.o
+testmodgcd
 testmodgcd22
 testmodgcd27
 testmodgcd32

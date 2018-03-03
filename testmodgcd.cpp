@@ -20,6 +20,9 @@
             
             made linux-oriented       August, 2015
             
+            added compilation macro   March 2, 2018
+            to turn off GPU code
+            
   J. Brew   jbrew5662@gmail.com
   
             extended test capability  February, 2018
@@ -55,7 +58,9 @@
 #error Only linux supported
 #endif
 
+#if !defined(NO_GPU)
 #include "GmpCudaDevice.h"
+#endif
 #include <iostream>
 #include <iomanip>
 #include <libgen.h>
@@ -66,10 +71,10 @@
 #include <sys/stat.h>
 #include <gmp.h>
 
-inline uint64_t monotonicTime(void)
+inline time_t monotonicTime(void)
 {
   struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
+  clock_gettime(CLOCK_MONOTONIC_RAW, &now);
   return now.tv_sec * 1000 * 1000 * 1000 + now.tv_nsec;
 }
 
@@ -81,6 +86,7 @@ using std::endl;
 using std::fixed;
 using std::setprecision;
 
+#if !defined(NO_GPU)
 struct MyGmpCudaGcdStats : public GmpCuda::GmpCudaGcdStats
 {
   MyGmpCudaGcdStats(const GmpCudaGcdStats& rhs) : GmpCudaGcdStats(rhs) {}
@@ -103,6 +109,7 @@ struct MyGmpCudaGcdStats : public GmpCuda::GmpCudaGcdStats
            << cyclesToMS(totalCycles)            << endl;
   }
 };
+#endif
 
 int
 main(int argc, char *argv[])
@@ -155,6 +162,9 @@ main(int argc, char *argv[])
 
   int cnt;
   int devNo = 0;
+#if defined(NO_GPU)
+  cout << "Executing tests only on CPU" << endl;
+#else
   cudaGetDeviceCount(&cnt);
   if ( cudaSuccess != cudaSetDevice(devNo)) {
     cout << "Error on cuda set device" << endl;
@@ -162,13 +172,19 @@ main(int argc, char *argv[])
   }
   cout << "Using device " << devNo << endl;
   cout << "Cuda device count = " << cnt << endl;
+#endif
 
-  uint64_t ttime;
+  time_t ttime;
 
   ttime = -monotonicTime();
+#if !defined(NO_GPU)
   GmpCuda::GmpCudaDevice dev(gridSize);
+#endif
   ttime += monotonicTime();
 
+#if defined(NO_GPU)
+  collectStats = false;
+#else
   dev.setCollectStats(collectStats);
 
   cout << endl
@@ -176,6 +192,7 @@ main(int argc, char *argv[])
        << "; initialization time: " << ttime/1e6 << " ms."
        << endl
        << "Grid size = " << dev.getGridSize() << endl;
+#endif
 
   mpz_t u, v, g, mod_g;
   mpz_init(g);
@@ -218,8 +235,8 @@ main(int argc, char *argv[])
              << "time-ms" << "\t"
              << "time-ms" << "\t"
              << "time-ms" << endl;
-      uint64_t atime = 0LL;
-      uint64_t mtime = 0LL;
+      time_t atime = time_t{0};
+      time_t mtime = time_t{0};
       int numErrs = 0;
 
       FILE * pFile;
@@ -313,7 +330,8 @@ main(int argc, char *argv[])
           mtime -= monotonicTime();
           mpz_gcd(g, u, v);
           mtime += monotonicTime();
-
+          
+#if !defined(NO_GPU)
           try
             {
               atime -= monotonicTime();
@@ -345,6 +363,7 @@ main(int argc, char *argv[])
               cout << "MOD_GCD = " << mod_gS << ", size = " << mpz_size(mod_g) << endl;
               numErrs += 1;
             }
+#endif
         }
 
       if(!random)
@@ -352,13 +371,17 @@ main(int argc, char *argv[])
         fclose (pFile);
       }
 
+      cout << fixed << setprecision(3);
+#if !defined(NO_GPU)
       if (numErrs == 0)
         cout << "Modular gcd correct\n";
-
-      cout << fixed << setprecision(3);
       cout << "MOD time(avg): " << atime/NUM_REPS/1e6 << " ms\n";
+#endif
+
       cout << "GMP time     : " << mtime/NUM_REPS/1e6 << " ms\n";
+#if !defined(NO_GPU)
       cout << "MOD/GMP ratio: " << (double)atime/(double)mtime << endl;
+#endif
 
       num_bits += increment;
     }

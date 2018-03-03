@@ -28,22 +28,22 @@ NVCC=nvcc
 NVCCFLAGS= -g -O2 --std c++11 --use_fast_math -m64 $(CUDA_ARCH)
 
 LD=nvcc
-LDFLAGS=$(CUDA_ARCH) $(CPPL)
+LDFLAGS=$(CUDA_ARCH)
 
 GCD_KERN_FLAGS=-maxrregcount 32 --device-c
 
 .PHONY: all clean distclean
 
-all: testmodgcd22 testmodgcd27 testmodgcd32
+all: testmodgcd testmodgcd22 testmodgcd27 testmodgcd32
 
 ##
-## Used to generate eecutables for the timing reported in paper(s).
+## Used to generate executables for the timing reported in paper(s).
 ## The same executable can be run on all three target systems.
 ##
 static:
 	echo "Making portable executables "
 	$(MAKE) distclean
-	$(MAKE) GMPL=-l:libgmp.a CPPL="-Xcompiler -static-libstdc++"
+	$(MAKE) GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)" CXXFLAGS="-static-libstdc++ $(CXXFLAGS)"
 
 testmodgcd22: testmodgcd.o GmpCudaDevice-gcd22.o GmpCudaDevice.o GmpCudaBarrier.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
@@ -53,6 +53,12 @@ testmodgcd27: testmodgcd.o GmpCudaDevice-gcd27.o GmpCudaDevice.o GmpCudaBarrier.
 
 testmodgcd32: testmodgcd.o GmpCudaDevice-gcd32.o GmpCudaDevice.o GmpCudaBarrier.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
+
+##
+##  This target will only use Gnu MP and no GPU.
+##  
+testmodgcd: testmodgcd.cpp
+	$(CXX) $(CXXFLAGS) -DNO_GPU $^ -o $@ $(GMPL)
 
 GmpCudaDevice.h: GmpCudaBarrier.h
 	touch $@
@@ -91,7 +97,7 @@ createModuli: createModuli.cpp
 	$(CXX) $(CXXFLAGS) $^ $(GMPL) -o $@
 
 clean:
-	rm *.o testmodgcd22 testmodgcd27 testmodgcd32 || true
+	rm *.o testmodgcd testmodgcd[0-9][0-9] || true
 
 distclean: clean
 	rm createModuli || true
