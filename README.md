@@ -7,7 +7,7 @@ Requires CUDA 9 development kit or more recent.  (See https://developer.nvidia.c
 
 ## Build commands
 
-The following command will build executables `testmodgcd22` and `testmodgcd32`.  It works on linux--tested on Ubuntu 16.04.
+The following command will build executables testmodgcd, testmodgcd22, testmodgcd27`and testmodgcd32.  It has been tested on Ubuntu 16.04.
 > `make`
 
 The following will clean out all but the `createModuli` executable and the `moduli` folder:
