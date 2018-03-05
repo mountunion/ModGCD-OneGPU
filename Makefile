@@ -83,15 +83,15 @@ GmpCudaDevice-gcd32.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h moduli/32bit/moduli.
 
 moduli/22bit/moduli.h: createModuli
 	mkdir -p moduli/22bit
-	ulimit -s 32768 && ./createModuli 22 > $@
+	ulimit -s 65536 && ./createModuli 22 > $@
 
 moduli/27bit/moduli.h: createModuli
 	mkdir -p moduli/27bit
-	ulimit -s 32768 && ./createModuli 27 > $@
+	ulimit -s 65536 && ./createModuli 27 > $@
 
 moduli/32bit/moduli.h: createModuli
 	mkdir -p moduli/32bit
-	ulimit -s 32768 && ./createModuli 32 > $@
+	ulimit -s 65536 && ./createModuli 32 > $@
 
 createModuli: createModuli.cpp
 	$(CXX) $(CXXFLAGS) $^ $(GMPL) -o $@

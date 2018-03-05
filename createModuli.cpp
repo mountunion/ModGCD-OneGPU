@@ -27,7 +27,7 @@
 #include <gmp.h>
 
 static const int W = 64;
-static const size_t MAX_NUM_MODULI = 1 << 19;  //  can go up to 1<<20 with ulimit = 32768
+static const size_t MAX_NUM_MODULI = 1 << 19;  //  can go up to 1<<22 with ulimit = 65536
 
 using namespace std;
 
@@ -227,4 +227,5 @@ int main(int argc, char *argv[])
   for (size_t i = 0; i < mListSize; i += 1)
     cout << "\t{" << moduliList[i] << ", " << mInvList[i] << "}," << endl;
   cout   << "};" << endl;
+  cerr   << "Percentage of primes usable as moduli = " << 100 * mListSize/mListSizeOriginal << endl;
 }
