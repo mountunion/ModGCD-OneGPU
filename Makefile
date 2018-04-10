@@ -33,7 +33,8 @@ GCD_KERN_FLAGS=-maxrregcount 32 --device-c
 
 .PHONY: all clean distclean
 
-all: testmodgcd testmodgcd22 testmodgcd27 testmodgcd32
+#all: testmodgcd testmodgcd22 testmodgcd27 testmodgcd32
+all: testmodgcd32
 
 ##
 ## Used to generate executables for the timing reported in paper(s).
