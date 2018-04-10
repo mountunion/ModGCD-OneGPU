@@ -120,10 +120,18 @@ namespace  //  used only within this compilation unit, and only for device code.
     int warpLane = threadIdx.x % warpSize;
     int warpIdx = threadIdx.x / warpSize;
     int numWarps = (gridDim.x - 1) / warpSize + 1;
+    
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+    winner = max(0, __ffs(__ballot_sync(FULL_MASK, threadIdx.x < gridDim.x && pair.value != 0)) - 1);
+    if (threadIdx.x < gridDim.x)
+      {
+        //  Using ballot so that every multiprocessor (deterministically) chooses the same pair(s).
+#else
     if (threadIdx.x < gridDim.x)
       {
         //  Using ballot so that every multiprocessor (deterministically) chooses the same pair(s).
         winner = max(0, __ffs(__ballot_sync(FULL_MASK, pair.value != 0)) - 1);
+#endif
         //  in case there is no winner, use the 0 from warpLane 0.
         if (winner == warpLane)
           sharedPair[warpIdx] = pair;
@@ -603,7 +611,7 @@ namespace  //  used only within this compilation unit, and only for device code.
       }
     while (pair.value != MOD_INFINITY);
     
-    printf("Made it out of main loop\n");
+    //printf("Made it out of main loop\n");
      
     if (STATS && threadIdx.x == 0)
       stats.reductionCycles += clock();
@@ -618,7 +626,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     myPair.value = (active) ? toSigned(uq, q) : 0;  //  Inactive threads should have low priority.
 
     postAnyPairPriorityNonzero<STATS>(myPair, bar);
-    printf("Made it past postAnyPair\n");
+    //printf("Made it past postAnyPair\n");
     collectAnyPairPriorityNonzero<STATS>(pair, bar);
 
     do
