@@ -33,7 +33,8 @@ GCD_KERN_FLAGS=-maxrregcount 32 --device-c
 
 .PHONY: all clean distclean
 
-all: testmodgcd testmodgcd22 testmodgcd27 testmodgcd32
+#all: testmodgcd testmodgcd22 testmodgcd27 testmodgcd32
+all: testmodgcd testmodgcd32
 
 ##
 ## Used to generate executables for the timing reported in paper(s).
@@ -42,7 +43,7 @@ all: testmodgcd testmodgcd22 testmodgcd27 testmodgcd32
 static:
 	echo "Making portable executables "
 	$(MAKE) clean
-	$(MAKE) testmodgcd testmodgcd32 GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)" CXXFLAGS="-static-libstdc++ $(CXXFLAGS)"
+	$(MAKE) GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)" CXXFLAGS="-static-libstdc++ $(CXXFLAGS)"
 
 testmodgcd22: testmodgcd.o GmpCudaDevice-gcd22.o GmpCudaDevice.o GmpCudaBarrier.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
