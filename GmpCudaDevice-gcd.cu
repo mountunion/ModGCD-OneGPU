@@ -84,10 +84,12 @@ namespace  //  used only within this compilation unit, and only for device code.
     __syncthreads();
 
     int numWarps = (blockDim.x - 1) / warpSize + 1;
-
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
+    winner = max(0, __ffs(__ballot_sync(FULL_MASK, threadIdx.x < numWarps && sharedPair[threadIdx.x].value != 0)) - 1);
+#else
     if (threadIdx.x < numWarps)
        winner = max(0, __ffs(__ballot_sync(FULL_MASK, sharedPair[threadIdx.x].value != 0)) - 1);
-
+#endif
     if (STATS && threadIdx.x == 0)
       stats.anyBarrierCycles -= clock();
       
@@ -616,6 +618,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     myPair.value = (active) ? toSigned(uq, q) : 0;  //  Inactive threads should have low priority.
 
     postAnyPairPriorityNonzero<STATS>(myPair, bar);
+    printf("Made it past postAnyPair\n");
     collectAnyPairPriorityNonzero<STATS>(pair, bar);
 
     do
