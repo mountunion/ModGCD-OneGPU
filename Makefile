@@ -33,7 +33,7 @@ GCD_KERN_FLAGS=-maxrregcount 32 --device-c
 
 .PHONY: all clean distclean
 
-all: testmodgcd testmodgcd22 testmodgcd27 testmodgcd32
+all: testmodgcd testmodgcd32
 
 ##
 ## Used to generate executables for the timing reported in paper(s).
@@ -43,12 +43,6 @@ static:
 	echo "Making portable executables "
 	$(MAKE) clean
 	$(MAKE) GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)" CXXFLAGS="-static-libstdc++ $(CXXFLAGS)"
-
-testmodgcd22: testmodgcd.o GmpCudaDevice-gcd22.o GmpCudaDevice.o GmpCudaBarrier.o
-	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
-
-testmodgcd27: testmodgcd.o GmpCudaDevice-gcd27.o GmpCudaDevice.o GmpCudaBarrier.o
-	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
 
 testmodgcd32: testmodgcd.o GmpCudaDevice-gcd32.o GmpCudaDevice.o GmpCudaBarrier.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
@@ -71,22 +65,8 @@ GmpCudaBarrier.o: GmpCudaBarrier.cu GmpCudaBarrier.h
 GmpCudaDevice.o: GmpCudaDevice.cu GmpCudaDevice.h
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
-GmpCudaDevice-gcd22.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h moduli/22bit/moduli.h
-	$(NVCC) -I moduli/22bit $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
-
-GmpCudaDevice-gcd27.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h moduli/27bit/moduli.h
-	$(NVCC) -I moduli/27bit $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
-
 GmpCudaDevice-gcd32.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h moduli/32bit/moduli.h
 	$(NVCC) -I moduli/32bit $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
-
-moduli/22bit/moduli.h: createModuli
-	mkdir -p moduli/22bit
-	ulimit -s 65536 && ./createModuli 22 > $@
-
-moduli/27bit/moduli.h: createModuli
-	mkdir -p moduli/27bit
-	ulimit -s 65536 && ./createModuli 27 > $@
 
 moduli/32bit/moduli.h: createModuli
 	mkdir -p moduli/32bit

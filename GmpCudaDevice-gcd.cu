@@ -52,10 +52,6 @@ namespace  //  used only within this compilation unit, and only for device code.
   constexpr int WARPS_PER_BLOCK = WARP_SZ / 4;               //  Provides most flexibility. 
   constexpr int BLOCK_SZ        = WARP_SZ * WARPS_PER_BLOCK;
 
-  //  If integer division on 32-bit integers ever becomes fast on NVidia GPUs, we
-  //  can use the code that this constant turns off.
-  constexpr bool INT_DIVIDE_IS_FAST = false;
-
   //  This type is used to pass back the gcd from the kernel as a list of pairs.
   typedef struct __align__(8) {uint32_t modulus; int32_t value;} pair_t;
 
@@ -84,12 +80,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     __syncthreads();
 
     int numWarps = (blockDim.x - 1) / warpSize + 1;
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
     winner = max(0, __ffs(__ballot_sync(FULL_MASK, threadIdx.x < numWarps && sharedPair[threadIdx.x].value != 0)) - 1);
-#else
-    if (threadIdx.x < numWarps)
-       winner = max(0, __ffs(__ballot_sync(FULL_MASK, sharedPair[threadIdx.x].value != 0)) - 1);
-#endif
     if (STATS && threadIdx.x == 0)
       stats.anyBarrierCycles -= clock();
       
@@ -121,17 +112,10 @@ namespace  //  used only within this compilation unit, and only for device code.
     int warpIdx = threadIdx.x / warpSize;
     int numWarps = (gridDim.x - 1) / warpSize + 1;
     
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
     winner = max(0, __ffs(__ballot_sync(FULL_MASK, threadIdx.x < gridDim.x && pair.value != 0)) - 1);
     if (threadIdx.x < gridDim.x)
       {
         //  Using ballot so that every multiprocessor (deterministically) chooses the same pair(s).
-#else
-    if (threadIdx.x < gridDim.x)
-      {
-        //  Using ballot so that every multiprocessor (deterministically) chooses the same pair(s).
-        winner = max(0, __ffs(__ballot_sync(FULL_MASK, pair.value != 0)) - 1);
-#endif
         //  in case there is no winner, use the 0 from warpLane 0.
         if (winner == warpLane)
           sharedPair[warpIdx] = pair;
@@ -197,16 +181,10 @@ namespace  //  used only within this compilation unit, and only for device code.
 
     //  Now find the min of the values in sharedX.
     //  WARPS_PER_BLOCK must be a power of 2 <= WARP_SZ.
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 700
     if (threadIdx.x < WARPS_PER_BLOCK)
       x = sharedX[threadIdx.x];
     if (threadIdx.x < WARP_SZ)
       {
-#else
-    if (threadIdx.x < WARPS_PER_BLOCK)
-      {
-        x = sharedX[threadIdx.x];
-#endif
 #pragma unroll
         for (int i = WARPS_PER_BLOCK/2; i > 0; i /= 2)
           x = min(x, __shfl_down_sync(FULL_MASK, x, i));        
@@ -355,144 +333,55 @@ namespace  //  used only within this compilation unit, and only for device code.
   {
     return (x >= m.modulus/2) ? x - m.modulus : x;
   }
+  
 
-  //  Return 1/v (mod m).  Requires 0 < v < m, and gcd(m,v) == 1.
-  //  Loop should finish if m == 0 but result will be junk.
-  //  Warning!! Loop may not finish if v == 0.
   __device__
   uint32_t
-  modInv(uint32_t v, modulus_t m)
+  quoRem(float& x, float y)
   {
-    if (L < 23)
+    float q = truncf(__fdividef(x, y));
+    x -= q*y;
+    // Estimate of q could be too high or too low by 1.
+    if (x < 0.0)
+      x += y, q -= 1.0;
+    if (x >= y)
+      x -= y, q += 1.0;
+    return static_cast<uint32_t>(q);
+  }
+
+  //  Return 1/v (mod u), assuming gcd(u,v) == 1.
+  //  Will execute faster if u > v.
+  //  Uses the extended Euclidean algorithm:
+  //  see Knuth, The Art of Computer Programming, vol. 2, 3/e,
+  //  Algorithm X on pp342-3.
+  __device__
+  uint32_t
+  modInv(uint32_t u, uint32_t v)
+  {
+    uint2 iu = make_uint2(0, u);
+    uint2 iv = make_uint2(1, v);
+    
+    int i;
+    
+    // quoRem is too expensive to do what is done in the next loop below.
+    // It causes warps to diverge.   
+    for (i = 1; iv.y != 0 && iu.y >= 1 << 23; i += 1)
       {
-        float x1, x2, y1, y2, q;
-
-        //  xi * v == yi (mod m)
-        //  One of the yi will be 1 at the end, since gcd(m,v) = 1.  The other will be 0.
-
-        x1 = 0.0, y1 = m.modulus;
-        x2 = 1.0, y2 = v;
-
-        do
-          {
-            q = truncf(__fdividef(y1, y2));
-            x1 -= x2*q;
-            y1 -= y2*q;
-            if (y1 == 0)
-              return static_cast<uint32_t>(x2);              //  Answer in x2 is positive.
-            q = truncf(__fdividef(y2, y1));
-            x2 -= x1*q;
-            y2 -= y1*q;
-          }
-        while (y2);
-        return m.modulus + static_cast<int32_t>(x1);         //  Answer in x1 is negative.
+        iu.x += iv.x * (iu.y / iv.y);
+        iu.y %= iv.y;
+        uint2 tmp = iu; iu = iv; iv = tmp;
       }
-    else   //  Values are too large to fit in float.
+    
+    //  When u3 and v3 are small enough, divide with floating point hardware.   
+    float fuy, fvy;      
+    for (fuy = iu.y, fvy = iv.y; fvy != 0.0; iv.x += iu.x * quoRem(fvy, fuy))
       {
-        int32_t  x1, x2;
-        uint32_t y1, y2;
-
-        x1 = 0, y1 = m.modulus;
-        x2 = 1, y2 = v;
-
-        //  We have two options here; if integer division is relatively, fast, use it.
-        //  Otherwise, use binary extended GCD algorithm to work x1, y1, x2, y2 down to the
-        //  point that they WILL fit into single precision.
-        //  Double-precision appears to be way too expensive, BTW.
-
-        if (INT_DIVIDE_IS_FAST)
-          {
-            do
-              {
-                uint32_t q;
-                q = y1 / y2;
-                x1 -= x2*q;
-                y1 -= y2*q;
-                if (y1 == 0)
-                  return x2;         //  Answer in x2 is positive.
-                q = y2 / y1;
-                x2 -= x1*q;
-                y2 -= y1*q;
-              }
-            while (y2);
-            return m.modulus + x1;  //  Answer in x1 is negative.
-          }
-        else  //  Non-divergent code to reduce y1 and y2 to fit into floats.
-              //  The code follows the basic outlines of the extended binary GCD algorithm.
-              //  See Knuth, the Art of Computer Programming: Seminumerical Algorithms 3/e
-              //  Section 4.5.2, Exercise 39 and solution.
-          {
-            y1 <<= (32 - L), y2 <<= (32 - L);
-            int j = __clz(y2);                          //  First eliminate y1's MSB
-            uint32_t y = y2 << j;
-            int32_t  x = x2 << j;
-            if (y <= y1)
-              y1 = y1 - y, x1 = x1 - x;
-            else
-              y1 = y - y1, x1 = x - x1;
-            j = __clz(y1);
-            y = y1 << j, x = x1 << j;
-            if (static_cast<int32_t>(y2) < 0)                         //  y2's MSB is still set, so eliminate it.
-              {
-                if (y <= y2)
-                  y2 = y2 - y, x2 = x2 - x;
-                else
-                  y2 = y - y2, x2 = x - x2;
-              }
-#pragma unroll
-            for (int i = 32 - L + 1; i < 10; i += 1)     //  Eliminate more bits from y1 and y2, by shifts and subtracts, to fit them into floats.
-              {
-                y1 <<= 1, y2 <<= 1;
-
-                j = __clz(y2);                           //  First eliminate y1's MSB
-                y = y2 << j, x = x2 << j;
-                if (static_cast<int32_t>(y1) < 0 && y2)
-                  {
-                    if (y <= y1)
-                      y1 = y1 - y, x1 = x1 - x;
-                    else
-                      y1 = y - y1, x1 = x - x1;
-                  }
-
-                j = __clz(y1);
-                y = y1 << j, x = x1 << j;
-                if (static_cast<int32_t>(y2) < 0 && y1)
-                  {
-                    if (y <= y2)
-                      y2 = y2 - y, x2 = x2 - x;
-                    else
-                      y2 = y - y2, x2 = x - x2;
-                  }
-              }
-
-            if (y1 == 0)
-              return fromSigned(x2, m);
-
-            float f1, f2, q;
-
-            f1 = y1 >> 9, f2 = y2 >> 9;
-
-            if (f2 > f1)
-              {
-                q = truncf(__fdividef(f2, f1));
-                x2 -= x1*static_cast<int32_t>(q);
-                f2 -= f1*q;
-              }
-
-            while (f2)
-              {
-                q = truncf(__fdividef(f1, f2));
-                x1 -= x2*static_cast<int32_t>(q);
-                f1 -= f2*q;
-                if (f1 == 0)
-                  return fromSigned(x2, m);
-                q = truncf(__fdividef(f2, f1));
-                x2 -= x1*static_cast<int32_t>(q);
-                f2 -= f1*q;
-              }
-            return fromSigned(x1, m);
-          }
+        iu.x += iv.x * quoRem(fuy, fvy);
+        if (fuy == 0.0)
+          return (i % 2 == 0) ? u - iv.x : iv.x;
       }
+      
+    return (i % 2 != 0) ? u - iu.x : iu.x;
   }
 
   // Calculate u/v mod m, in the range [0,m-1]
@@ -500,7 +389,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   uint32_t
   modDiv(uint32_t u, uint32_t v, modulus_t m)
   {
-    return modMul(u, modInv(v, m), m);
+    return modMul(u, modInv(m.modulus, v), m);
   }
 
   //  Calculate x mod m for a multiword unsigned integer x.
