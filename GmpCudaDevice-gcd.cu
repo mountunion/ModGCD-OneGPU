@@ -349,6 +349,15 @@ namespace  //  used only within this compilation unit, and only for device code.
     return static_cast<uint32_t>(q);
   }
 
+  __device__
+  uint32_t
+  quoRem(uint32_t& x, uint32_t y)
+  {
+    uint32_t q = x / y;
+    x -= q * y;
+    return q;
+  }
+
   //  Return 1/v (mod u), assuming gcd(u,v) == 1.
   //  Will execute faster if u > v.
   //  Uses the extended Euclidean algorithm:
@@ -358,30 +367,30 @@ namespace  //  used only within this compilation unit, and only for device code.
   uint32_t
   modInv(uint32_t u, uint32_t v)
   {
-    uint2 iu = make_uint2(0, u);
-    uint2 iv = make_uint2(1, v);
+    uint32_t u2u = 0, u3u = u;
+    uint32_t v2u = 1, v3u = v;
     
     int i;
     
     // quoRem is too expensive to do what is done in the next loop below.
     // It causes warps to diverge.   
-    for (i = 1; iv.y != 0 && iu.y >= 1 << 23; i += 1)
+    for (i = 1; v3u != 0 && u3u >= 1 << 24; i += 1)
       {
-        iu.x += iv.x * (iu.y / iv.y);
-        iu.y %= iv.y;
-        uint2 tmp = iu; iu = iv; iv = tmp;
+        u2u += v2u * quoRem(u3u, v3u);
+        uint32_t tmp;
+        tmp = u2u; u2u = v2u; v2u = tmp;
+        tmp = u3u; u3u = v3u; v3u = tmp;
       }
     
     //  When u3 and v3 are small enough, divide with floating point hardware.   
-    float fuy, fvy;      
-    for (fuy = iu.y, fvy = iv.y; fvy != 0.0; iv.x += iu.x * quoRem(fvy, fuy))
+    for (float fuy = u3u, fvy = v3u; fvy != 0.0; v2u += u2u * quoRem(fvy, fuy))
       {
-        iu.x += iv.x * quoRem(fuy, fvy);
+        u2u += v2u * quoRem(fuy, fvy);
         if (fuy == 0.0)
-          return (i % 2 == 0) ? u - iv.x : iv.x;
+          return (i % 2 == 0) ? u - v2u : v2u;
       }
       
-    return (i % 2 != 0) ? u - iu.x : iu.x;
+    return (i % 2 != 0) ? u - u2u : u2u;
   }
 
   // Calculate u/v mod m, in the range [0,m-1]
