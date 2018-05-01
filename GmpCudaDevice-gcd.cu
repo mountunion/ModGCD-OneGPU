@@ -383,10 +383,10 @@ namespace  //  used only within this compilation unit, and only for device code.
       }
     
     //  When u3 and v3 are small enough, divide with floating point hardware.   
-    for (float fuy = u3u, fvy = v3u; fvy != 0.0; v2u += u2u * quoRem(fvy, fuy))
+    for (float u3f = u3u, v3f = v3u; v3f != 0.0; v2u += u2u * quoRem(v3f, u3f))
       {
-        u2u += v2u * quoRem(fuy, fvy);
-        if (fuy == 0.0)
+        u2u += v2u * quoRem(u3f, v3f);
+        if (u3f == 0.0)
           return (i % 2 == 0) ? u - v2u : v2u;
       }
       
