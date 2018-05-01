@@ -19,7 +19,8 @@
 
 GMPL=-lgmp
 
-CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_52,code=sm_52 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_61,code=sm_61 -gencode=arch=compute_70,code=sm_70
+#CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_52,code=sm_52 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_61,code=sm_61 -gencode=arch=compute_70,code=sm_70
+CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_61,code=sm_61
 CXX=g++
 CXXFLAGS=--std c++11 -O2 -m64
 

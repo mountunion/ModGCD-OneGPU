@@ -367,12 +367,15 @@ namespace  //  used only within this compilation unit, and only for device code.
   uint32_t
   modInv(uint32_t u, uint32_t v)
   {
-    uint32_t u2u = 0, u3u = u;
-    uint32_t v2u = 1, v3u = v;
+  
+    uint32_t u2u, v2u;
+    uint32_t u3u, v3u;
+    u2u = 0, u3u = u;
+    v2u = 1, v3u = v;
     
     int i;
     
-    // quoRem is too expensive to do what is done in the next loop below.
+    // the uint32_t version of quoRem is too expensive to do what is done in the next loop below.
     // It causes warps to diverge.   
     for (i = 1; v3u != 0 && u3u >= 1 << 24; i += 1)
       {
