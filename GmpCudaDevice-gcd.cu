@@ -354,7 +354,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   quoRem(uint32_t& x, uint32_t y)
   {
     uint32_t q = x / y;
-    x -= q * y;
+    x %= y;
     return q;
   }
 
@@ -367,33 +367,38 @@ namespace  //  used only within this compilation unit, and only for device code.
   uint32_t
   modInv(uint32_t u, uint32_t v)
   {
+    const uint32_t FLOAT_THRESHOLD = 1 << 24;
   
-    uint32_t u2u, v2u;
-    uint32_t u3u, v3u;
-    u2u = 0, u3u = u;
-    v2u = 1, v3u = v;
+    uint32_t u2u = 0, u3u = u;
+    uint32_t v2u = 1, v3u = v;
     
-    int i;
-    
-    // the uint32_t version of quoRem is too expensive to do what is done in the next loop below.
-    // It causes warps to diverge.   
-    for (i = 1; v3u != 0 && u3u >= 1 << 24; i += 1)
+    while (v3u != 0 && u3u >= FLOAT_THRESHOLD)
       {
         u2u += v2u * quoRem(u3u, v3u);
-        uint32_t tmp;
-        tmp = u2u; u2u = v2u; v2u = tmp;
-        tmp = u3u; u3u = v3u; v3u = tmp;
+        if (u3u == 0 || v3u < FLOAT_THRESHOLD)
+          break;
+        v2u += u2u * quoRem(v3u, u3u);
       }
-    
+      
+    if (u3u == 0)
+      return v2u;
+      
     //  When u3 and v3 are small enough, divide with floating point hardware.   
-    for (float u3f = u3u, v3f = v3u; v3f != 0.0; v2u += u2u * quoRem(v3f, u3f))
+    
+    float u3f = u3u, v3f = v3u;
+    
+    if (v3f > u3f)
+      v2u += u2u * quoRem(v3f, u3f);
+    
+    while (v3f != 0.0)
       {
         u2u += v2u * quoRem(u3f, v3f);
         if (u3f == 0.0)
-          return (i % 2 == 0) ? u - v2u : v2u;
+          return v2u;
+        v2u += u2u * quoRem(v3f, u3f);
       }
       
-    return (i % 2 != 0) ? u - u2u : u2u;
+    return u - u2u;
   }
 
   // Calculate u/v mod m, in the range [0,m-1]
