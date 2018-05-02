@@ -516,8 +516,6 @@ namespace  //  used only within this compilation unit, and only for device code.
         collectMinPair<STATS>(pair, bar);
       }
     while (pair.value != MOD_INFINITY);
-    
-    //printf("Made it out of main loop\n");
      
     if (STATS && threadIdx.x == 0)
       stats.reductionCycles += clock();
@@ -532,7 +530,7 @@ namespace  //  used only within this compilation unit, and only for device code.
     myPair.value = (active) ? toSigned(uq, q) : 0;  //  Inactive threads should have low priority.
 
     postAnyPairPriorityNonzero<STATS>(myPair, bar);
-    //printf("Made it past postAnyPair\n");
+
     collectAnyPairPriorityNonzero<STATS>(pair, bar);
 
     do

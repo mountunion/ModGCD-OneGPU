@@ -77,6 +77,9 @@
             Modified to allow large   February 17, 2018
             grid sizes up to maximum 
             occupancy.  
+            
+            Corrected errors in       May 2, 2018
+            modInv.
 */
 
 //  Enforce use of CUDA 9 at compile time.
