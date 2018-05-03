@@ -334,7 +334,8 @@ namespace  //  used only within this compilation unit, and only for device code.
     return (x >= m.modulus/2) ? x - m.modulus : x;
   }
   
-
+  //  This version of quoRem requires that x and y be truncated integers
+  //  and that (1 << 24) > x > y >= 2.
   __device__
   uint32_t
   quoRem(float& x, float y)
@@ -372,33 +373,33 @@ namespace  //  used only within this compilation unit, and only for device code.
     uint32_t u2u = 0, u3u = u;
     uint32_t v2u = 1, v3u = v;
     
-    while (v3u != 0 && u3u >= FLOAT_THRESHOLD)
+    while  (v3u != 1 && u3u >= FLOAT_THRESHOLD)
       {
         u2u += v2u * quoRem(u3u, v3u);
-        if (u3u == 0 || v3u < FLOAT_THRESHOLD)
+        if (u3u == 1 || v3u <  FLOAT_THRESHOLD)
           break;
         v2u += u2u * quoRem(v3u, u3u);
       }
+    
+    if (u3u == 1)
+      return u - u2u;
       
-    if (u3u == 0)
-      return v2u;
-      
-    //  When u3 and v3 are small enough, divide with floating point hardware.   
+    //  When u3 and v3 are both small enough, divide with floating point hardware.   
     
     float u3f = u3u, v3f = v3u;
     
     if (v3f > u3f)
       v2u += u2u * quoRem(v3f, u3f);
     
-    while (v3f != 0.0)
+    while  (v3f != 1.0)
       {
         u2u += v2u * quoRem(u3f, v3f);
-        if (u3f == 0.0)
-          return v2u;
+        if (u3f == 1.0)
+          break;
         v2u += u2u * quoRem(v3f, u3f);
       }
-      
-    return u - u2u;
+     
+    return (v3f == 1.0) ? v2u : u - u2u;
   }
 
   // Calculate u/v mod m, in the range [0,m-1]
