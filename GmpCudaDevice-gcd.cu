@@ -336,6 +336,10 @@ namespace  //  used only within this compilation unit, and only for device code.
   
   //  This version of quoRem requires that x and y be truncated integers
   //  and that (1 << 24) > x > y >= 2.
+  //  Note that __fdividef(x, y) is accurate to 2 ulp;
+  //  when x and y are in this range, 1 < floor(x/y) < 2^23 means
+  //  2 ulp <= 1.0, so__fdividef should give a result within +/-1
+  //  of the true quotient.
   __device__
   uint32_t
   quoRem(float& x, float y)
