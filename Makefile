@@ -19,8 +19,8 @@
 
 GMPL=-lgmp
 
-CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_52,code=sm_52 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_61,code=sm_61 -gencode=arch=compute_70,code=sm_70
-#CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_61,code=sm_61
+#CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_52,code=sm_52 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_61,code=sm_61 -gencode=arch=compute_70,code=sm_70
+CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_61,code=sm_61
 CXX=g++
 CXXFLAGS=--std c++11 -O2 -m64
 
@@ -71,7 +71,7 @@ GmpCudaDevice-gcd32.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h moduli/32bit/moduli.
 
 moduli/32bit/moduli.h: createModuli
 	mkdir -p moduli/32bit
-	ulimit -s 65536 && ./createModuli 32 > $@
+	./createModuli 32 > $@
 
 createModuli: createModuli.cpp
 	$(CXX) $(CXXFLAGS) $^ $(GMPL) -o $@
