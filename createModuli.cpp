@@ -27,7 +27,7 @@
 #include <gmp.h>
 
 static const int W = 64;
-static const size_t MAX_NUM_MODULI = 1 << 27;  //  can go up to 1<<22 with ulimit = 65536
+static const size_t MAX_NUM_MODULI = 1 << 19;  //  can go up to 1<<27 with current declarations.
 
 using namespace std;
 
