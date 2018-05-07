@@ -30,6 +30,13 @@
 namespace GmpCuda
 {
   constexpr int WARP_SZ = 32;  // GmpCudaDevice checks to see whether this is true.
+  typedef struct {uint32_t modulus; uint64_t inverse;} modulus_t;
+  constexpr int L = 32;
+  constexpr int W = 64;
+  constexpr int NUM_MODULI = 1 << 19;
+#ifdef __CUDACC__
+  extern __device__ const modulus_t moduliList[];
+#endif
   struct GmpCudaGcdStats
   {
     uint32_t

@@ -19,22 +19,22 @@
 
 GMPL=-lgmp
 
-CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_52,code=sm_52 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_61,code=sm_61 -gencode=arch=compute_70,code=sm_70
-#CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_61,code=sm_61
+#CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_52,code=sm_52 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_61,code=sm_61 -gencode=arch=compute_70,code=sm_70
+CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_61,code=sm_61
 CXX=g++
 CXXFLAGS=--std c++11 -O2 -m64
 
 NVCC=nvcc
-NVCCFLAGS= -g -O2 --std c++11 --use_fast_math -m64 $(CUDA_ARCH)
+NVCCFLAGS= -g -O2 --std c++11 --use_fast_math -m64  --device-c $(CUDA_ARCH)
 
 LD=nvcc
 LDFLAGS=$(CUDA_ARCH)
 
-GCD_KERN_FLAGS=-maxrregcount 32 --device-c
+GCD_KERN_FLAGS=-maxrregcount 32
 
 .PHONY: all clean distclean
 
-all: testmodgcd testmodgcd32
+all: testmodgcd testmodgcd-nogpu
 
 ##
 ## Used to generate executables for the timing reported in paper(s).
@@ -45,14 +45,14 @@ static:
 	$(MAKE) clean
 	$(MAKE) GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)" CXXFLAGS="-static-libstdc++ $(CXXFLAGS)"
 
-testmodgcd32: testmodgcd.o GmpCudaDevice-gcd32.o GmpCudaDevice.o GmpCudaBarrier.o
+testmodgcd: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
 
 ##
 ##  This target will only use Gnu MP and no GPU.
 ##  
-testmodgcd: testmodgcd.cpp
-	$(CXX) $(CXXFLAGS) -DNO_GPU $^ -o $@ $(GMPL)
+testmodgcd-nogpu: testmodgcd.cpp GmpCudaDevice.h
+	$(CXX) $(CXXFLAGS) -DNO_GPU $< -o $@ $(GMPL)
 
 GmpCudaDevice.h: GmpCudaBarrier.h
 	touch $@
@@ -66,20 +66,22 @@ GmpCudaBarrier.o: GmpCudaBarrier.cu GmpCudaBarrier.h
 GmpCudaDevice.o: GmpCudaDevice.cu GmpCudaDevice.h
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
-GmpCudaDevice-gcd32.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h moduli/32bit/moduli.h
-	$(NVCC) -I moduli/32bit $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
+GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h
+	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
-moduli/32bit/moduli.h: createModuli
-	mkdir -p moduli/32bit
-	./createModuli 32 > $@
+GmpCudaModuli.cu: createModuli GmpCudaDevice.h
+	./createModuli > $@
 
-createModuli: createModuli.cpp
-	$(CXX) $(CXXFLAGS) $^ $(GMPL) -o $@
+GmpCudaModuli.o: GmpCudaModuli.cu 
+	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
+
+createModuli: createModuli.cpp GmpCudaDevice.h
+	$(NVCC) $(CXXFLAGS) $< $(GMPL) -o $@
 
 clean:
 	rm *.o testmodgcd testmodgcd[0-9][0-9] || true
 
 distclean: clean
 	rm createModuli || true
-	rm -rf moduli || true
+	rm -rf moduli.cu || true
 	rm -rf tests || true
