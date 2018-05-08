@@ -98,30 +98,22 @@ size_t primes(uint32_t * list, size_t n)
   static constexpr uint32_t SIEVE_SZ = 1 << (L - 2); //  Will handle all L-bit odd primes. 
   static char sieve[SIEVE_SZ];                
   uint32_t limit = (uint64_t{1} << L) - 1;
-  uint32_t lowerLimit = 1 << (L - 1);
  
   if (n == 0 || limit < 3)
       return n;
 
-  size_t sieve_sz = SIEVE_SZ;
-  if (sieve_sz > limit/2)
-      sieve_sz = limit/2;
+  memset(sieve, 0, SIEVE_SZ);
 
-  memset(sieve, 0, sieve_sz);
-
-  mark_composite(limit, sieve, sieve_sz);
+  mark_composite(limit, sieve, SIEVE_SZ);
 
   /*  Harvest primes.  */
-  for (size_t i = 0; i < sieve_sz; i++)
+  for (size_t i = 0; i < SIEVE_SZ && n > 0; i += 1)
     {
-      if (sieve[i])
-        continue;                         /*  Composite.  */
-      *list = limit - (i << 1);
-      if (*list++ < lowerLimit)
-        return n;
-      n -= 1;
-      if (n == 0)
-        return n;
+      if (sieve[i] == 0)
+        {
+          *list++ = limit - (i << 1);
+          n -= 1;
+        }
     }
 
   return n;
