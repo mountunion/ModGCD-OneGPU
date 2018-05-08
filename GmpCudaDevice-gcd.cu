@@ -31,7 +31,6 @@
 #include <cassert>
 #include "GmpCudaDevice.h"
 using namespace GmpCuda;
-#include "moduli.h"
 #include <iostream>
 
 #ifdef USE_COOP_GROUPS

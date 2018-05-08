@@ -101,13 +101,11 @@ size_t primes(uint32_t * list, size_t n, int k)
   static char sieve[SIEVE_SZ];                
   uint32_t limit = (uint64_t{1} << k) - 1;
   uint32_t lowerLimit = 1 << (k - 1);
-
-  size_t sieve_sz = SIEVE_SZ;
-  
+ 
   if (n == 0 || limit < 3)
       return n;
 
-   /*  Now strike non-primes from the sieve and harvest primes.  */
+  size_t sieve_sz = SIEVE_SZ;
   if (sieve_sz > limit/2)
       sieve_sz = limit/2;
 
@@ -133,7 +131,7 @@ size_t primes(uint32_t * list, size_t n, int k)
 
 int main(int argc, char *argv[])
 {
-  static constexpr size_t MAX_NUM_MODULI = 100 * 1000 * 1000;  //  can go up to 1<<27 with current declarations.
+  static constexpr size_t MAX_NUM_MODULI = 100 * 1000 * 1000;  //  There are around 98 million 32-bit moduli.
   static uint32_t moduliList[MAX_NUM_MODULI];
   size_t mListSize = MAX_NUM_MODULI - primes(moduliList, MAX_NUM_MODULI, L);
 
