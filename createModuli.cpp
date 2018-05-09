@@ -64,7 +64,7 @@ static inline uint32_t oddSqrt(uint32_t x)
 //  Returns true if d is relatively prime to the small primes,
 //  or if it is one of the small primes, and false otherwise.
 //  Precondition: d is odd.
-static inline bool isSmallPrimeOrRelativelyPrimeToAll(uint32_t d)
+static inline bool isMultipleOfSmallPrime(uint32_t d)
 {
   uint32_t x = d;
   uint32_t y = uint32_t{3}*5*7*11*13*17*19*23*29;
@@ -85,14 +85,17 @@ static inline bool isSmallPrimeOrRelativelyPrimeToAll(uint32_t d)
     }
   switch (x)  // x == gcd(d, 3*5*7*11*13*17*19*23*29).
     {
-    case 1:
-      return true;
-    case  3: case  5: case  7: 
-    case 11: case 13: case 17: 
-    case 19: case 23: case 29:
-      return (d == x);
-    default:
-      return false;
+      case  1: return false;
+      case  3: 
+      case  5: 
+      case  7: 
+      case 11: 
+      case 13: 
+      case 17: 
+      case 19: 
+      case 23: 
+      case 29: return (d > x);
+      default: return true;
     }
 }
 
@@ -114,11 +117,10 @@ int main(int argc, char *argv[])
   memset(sieve, 0, SIEVE_SZ);
   for (uint32_t d = oddSqrt(TWO_L_1); d > 2; d -= 2)
     {
-      if (isSmallPrimeOrRelativelyPrimeToAll(d))
-        {
-          for (size_t i = sieveIndexOfLargestOddMultiple(d); i < SIEVE_SZ; i += d)
-            sieve[i] = !0;
-        }
+      if (isMultipleOfSmallPrime(d))  // Ignore, since will be handled by other values of d.
+        continue;
+      for (size_t i = sieveIndexOfLargestOddMultiple(d); i < SIEVE_SZ; i += d)
+        sieve[i] = !0;
     }
   
   size_t numPrimes = 0;
