@@ -76,7 +76,7 @@ GmpCudaModuli.o: GmpCudaModuli.cu GmpCudaModuli.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
 createModuli: createModuli.cpp GmpCudaDevice.h
-	$(NVCC) $(CXXFLAGS) $< $(GMPL) -o $@
+	$(CXX) $(CXXFLAGS) $< $(GMPL) -o $@
 
 clean:
 	rm *.o testmodgcd testmodgcd[0-9][0-9] || true
