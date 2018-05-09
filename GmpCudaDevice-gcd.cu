@@ -54,6 +54,9 @@ namespace  //  used only within this compilation unit, and only for device code.
 
   //  This type is used to pass back the gcd from the kernel as a list of pairs.
   typedef struct __align__(8) {uint32_t modulus; int32_t value;} pair_t;
+  
+  //  This type is used to conveniently manipulate the modulus and its inverse.
+  typedef struct {uint32_t modulus; uint64_t inverse;} modulus_t;
 
   __shared__ GmpCudaGcdStats stats;
     
@@ -465,7 +468,9 @@ namespace  //  used only within this compilation unit, and only for device code.
       }
 
     //MGCD1: [Find suitable moduli]
-    modulus_t q = moduliList[blockDim.x * blockIdx.x + threadIdx.x];
+    modulus_t q;
+    q.modulus = moduliList       [blockDim.x * blockIdx.x + threadIdx.x];
+    q.inverse = inverseModuliList[blockDim.x * blockIdx.x + threadIdx.x];
 
     //MGCD2: [Convert to modular representation]
 
