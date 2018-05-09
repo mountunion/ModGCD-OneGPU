@@ -66,13 +66,13 @@ GmpCudaBarrier.o: GmpCudaBarrier.cu GmpCudaBarrier.h
 GmpCudaDevice.o: GmpCudaDevice.cu GmpCudaDevice.h
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
-GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h
+GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h GmpCudaModuli.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
-GmpCudaModuli.cu: createModuli GmpCudaDevice.h
+GmpCudaModuli.cu: createModuli GmpCudaModuli.h
 	./createModuli > $@
 
-GmpCudaModuli.o: GmpCudaModuli.cu 
+GmpCudaModuli.o: GmpCudaModuli.cu GmpCudaModuli.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
 createModuli: createModuli.cpp GmpCudaDevice.h

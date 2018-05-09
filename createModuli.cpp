@@ -27,7 +27,7 @@
 #include <cstdlib>
 #include <stdint.h>
 #include <gmp.h>
-#include "GmpCudaDevice.h"
+#include "GmpCudaModuli.h"
 
 using namespace std;
 using namespace GmpCuda;
@@ -140,7 +140,7 @@ int main(int argc, char *argv[])
          << "//      Efficient Algorithms for Integer Division by Constants Using Multiplication," << endl
          << "//      The Computer Journal, Vol. 51 No. 4, 2008." << endl
          << endl
-         << "#include \"GmpCudaDevice.h\"" << endl
+         << "#include \"GmpCudaModuli.h\"" << endl
          << "__device__ const GmpCuda::modulus_t GmpCuda::moduliList[] = " << endl
          << "{" << endl;
   
@@ -148,18 +148,18 @@ int main(int argc, char *argv[])
   for (size_t i = 0; i < SIEVE_SZ; i += 1)
     {
       if (sieve[i])
-        continue;                   //  Composite--ignore.       
-      uint32_t D = integerAt(i);    //  D is prime.
+        continue;                       //  Composite--ignore.       
+      uint32_t D = integerAt(i);        //  D is prime.
       numPrimes += 1;
       mpz_fdiv_q_ui(J, FC, D);
-      mpz_add_ui(J, J, 1);          //  J <-- FC / D + 1
+      mpz_add_ui(J, J, 1);              //  J <-- FC / D + 1
       mpz_mul_ui(DJ_FC, J, D);
-      mpz_sub(DJ_FC, DJ_FC, FC);    //  DJ_FC <-- D * J - FC
-      mpz_cdiv_q(Qcr, J, DJ_FC);    //  Qcr <-- ceil(J / DJ_FC)
+      mpz_sub(DJ_FC, DJ_FC, FC);        //  DJ_FC <-- D * J - FC
+      mpz_cdiv_q(Qcr, J, DJ_FC);        //  Qcr <-- ceil(J / DJ_FC)
       mpz_mul_ui(Ncr, Qcr, D);
-      mpz_sub_ui(Ncr, Ncr, 1);      //  Ncr <-- Qcr * D - 1
+      mpz_sub_ui(Ncr, Ncr, 1);          //  Ncr <-- Qcr * D - 1
       if (mpz_sizeinbase(Ncr, 2) <= W)
-        continue;
+        continue;                       //  Not usaable as modulus
       uint64_t Dinverse;
       mpz_export(&Dinverse, NULL, -1, sizeof(uint64_t), 0, 0, J);
       numUsable += 1;
