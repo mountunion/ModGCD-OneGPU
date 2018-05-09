@@ -69,13 +69,13 @@ GmpCudaDevice.o: GmpCudaDevice.cu GmpCudaDevice.h
 GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h GmpCudaModuli.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
-GmpCudaModuli.cu: createModuli GmpCudaModuli.h
+GmpCudaModuli.cu GmpCudaInverseModuli.cu: createModuli GmpCudaModuli.h
 	./createModuli
 
 GmpCudaModuli.o: GmpCudaModuli.cu GmpCudaModuli.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
-GmpCudaInverseModuli.o: GmpCudaInverseModuli.cu
+GmpCudaInverseModuli.o: GmpCudaInverseModuli.cu GmpCudaModuli.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
 createModuli: createModuli.cpp GmpCudaModuli.h

@@ -191,11 +191,8 @@ int main(void)
   fbinv.close();
   
   cout << "There are " << numPrimes << " " << L << "-bit primes; "
-       << numUsable << " are usable as moduli." << endl;
+       << numUsable << " are usable as moduli," 
+       << " and " << NUM_MODULI << " moduli are called for."  << endl;
        
-  if (numUsable >= NUM_MODULI)
-    return 0;  
-    
-  cerr << "Error: "<< NUM_MODULI << " usable moduli are required." << endl;
-  return 2;
+  return (numUsable >= NUM_MODULI) ? 0 : 2;
 }
