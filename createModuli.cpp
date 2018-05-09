@@ -33,7 +33,7 @@ using namespace std;
 using namespace GmpCuda;
 
 //  Symbolic constant for 2^L - 1.
-constexpr uint32_t TWO_L_1 = (uint64_t{1} << L) - 1;
+constexpr uint32_t TWO_L_1 = static_cast<uint32_t>((uint64_t{1} << L) - 1);
 
 //  sieve[i] represents the integer x == (2^L - 1) - 2*i.
 static inline uint32_t integerAt(size_t i)
@@ -61,29 +61,29 @@ static inline uint32_t oddSqrt(uint32_t x)
   return d;
 }
 
-//  Returns true if d is relatively prime to the small primes,
-//  or if it is one of the small primes, and false otherwise.
+//  Returns true iff d == k * p, 
+//  where p is a prime, 3 <= p <= 29, and k >= 2 is an integer.
 //  Precondition: d is odd.
 static inline bool isMultipleOfSmallPrime(uint32_t d)
 {
-  uint32_t x = d;
-  uint32_t y = uint32_t{3}*5*7*11*13*17*19*23*29;
-  while (x != y)
+  uint32_t g1 = d;
+  uint32_t g2 = uint32_t{3}*5*7*11*13*17*19*23*29;
+  while (g1 != g2)
     {
-      if (x > y)
+      if (g1 > g2)
         {
-          x -= y;
-          while (x % 2 == 0)
-            x /= 2;
+          g1-= g2;
+          while (g1 % 2 == 0)
+            g1 /= 2;
         }
       else
         {
-          y -= x;
-          while (y % 2 == 0)
-            y /= 2;
+          g2 -= g1;
+          while (g2 % 2 == 0)
+            g2 /= 2;
         }
     }
-  switch (x)  // x == gcd(d, 3*5*7*11*13*17*19*23*29).
+  switch (g1)  // g1 == g2 == gcd(d, 3*5*7*11*13*17*19*23*29).
     {
       case  1: return false;
       case  3: 
@@ -94,7 +94,7 @@ static inline bool isMultipleOfSmallPrime(uint32_t d)
       case 17: 
       case 19: 
       case 23: 
-      case 29: return (d > x);
+      case 29: return (d > g1);
       default: return true;
     }
 }
@@ -113,8 +113,8 @@ int main(int argc, char *argv[])
   //  Sieve needs to be large enough to represent all 2^(L-2) odd integers
   //  in the range 2^(L-1)...2^L.
   constexpr uint32_t SIEVE_SZ = 1 << (L - 2);
-  static char sieve[SIEVE_SZ];                
-  memset(sieve, 0, SIEVE_SZ);
+  static char  sieve[SIEVE_SZ];                
+  memset(sieve, 0,   SIEVE_SZ);
   for (uint32_t d = oddSqrt(TWO_L_1); d > 2; d -= 2)
     {
       if (isMultipleOfSmallPrime(d))  // Ignore, since will be handled by other values of d.
