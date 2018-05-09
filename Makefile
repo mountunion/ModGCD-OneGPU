@@ -45,7 +45,7 @@ static:
 	$(MAKE) clean
 	$(MAKE) GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)" CXXFLAGS="-static-libstdc++ $(CXXFLAGS)"
 
-testmodgcd: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o GmpCudaInverseModuli.o
+testmodgcd: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
 
 ##
@@ -69,13 +69,10 @@ GmpCudaDevice.o: GmpCudaDevice.cu GmpCudaDevice.h
 GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h GmpCudaModuli.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
-GmpCudaModuli.cu GmpCudaInverseModuli.cu: createModuli GmpCudaModuli.h
-	./createModuli
+GmpCudaModuli.cu: createModuli GmpCudaModuli.h
+	./createModuli > $@
 
 GmpCudaModuli.o: GmpCudaModuli.cu GmpCudaModuli.h
-	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
-
-GmpCudaInverseModuli.o: GmpCudaInverseModuli.cu GmpCudaModuli.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
 createModuli: createModuli.cpp GmpCudaModuli.h
@@ -86,5 +83,5 @@ clean:
 
 distclean: clean
 	rm createModuli || true
-	rm -rf moduli.cu || true
+	rm -rf GmpCudaModuli.cu || true
 	rm -rf tests || true

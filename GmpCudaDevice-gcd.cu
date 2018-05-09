@@ -447,6 +447,23 @@ namespace  //  used only within this compilation unit, and only for device code.
       result = mod(result << 32 | sharedX[i], m);
     return static_cast<uint32_t>(result);
   }
+  
+  
+  // Initialize modulus for this thread
+  // by reading a modulus m from the list and computing
+  // its inverse, which is 2^(W + L - 1) / m + 1.
+  __device__
+  inline
+  void
+  initModulus(modulus_t& m)
+  {
+      m.modulus = moduliList[blockDim.x * blockIdx.x + threadIdx.x];
+      uint64_t D = static_cast<uint64_t>(m.modulus);
+      constexpr uint64_t FC_hi = uint64_t{1} << (W - 1);
+      uint64_t q = FC_hi / D;
+      uint64_t r = FC_hi % D;
+      m.inverse = uint64_t{1} + (q << L) + (r << L) / D;
+  }
 
   //  Entry point into device-only code.
   template <bool STATS>
@@ -468,9 +485,8 @@ namespace  //  used only within this compilation unit, and only for device code.
       }
 
     //MGCD1: [Find suitable moduli]
-    modulus_t q;
-    q.modulus = moduliList       [blockDim.x * blockIdx.x + threadIdx.x];
-    q.inverse = inverseModuliList[blockDim.x * blockIdx.x + threadIdx.x];
+    modulus_t q; 
+    initModulus(q);
 
     //MGCD2: [Convert to modular representation]
 
