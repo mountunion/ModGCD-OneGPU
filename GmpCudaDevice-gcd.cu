@@ -454,15 +454,15 @@ namespace  //  used only within this compilation unit, and only for device code.
   // its inverse, which is 2^(W + L - 1) / m + 1.
   __device__
   inline
-  void
-  initModulus(modulus_t& m)
+  modulus_t
+  getModulus()
   {
-      m.modulus = moduliList[blockDim.x * blockIdx.x + threadIdx.x];
-      uint64_t D = static_cast<uint64_t>(m.modulus);
+      uint32_t m = moduliList[blockDim.x * blockIdx.x + threadIdx.x];
+      uint64_t D = static_cast<uint64_t>(m);
       constexpr uint64_t FC_hi = uint64_t{1} << (W - 1);
       uint64_t q = FC_hi / D;
       uint64_t r = FC_hi % D;
-      m.inverse = uint64_t{1} + (q << L) + (r << L) / D;
+      return {m, uint64_t{1} + (q << L) + (r << L) / D};
   }
 
   //  Entry point into device-only code.
@@ -485,8 +485,7 @@ namespace  //  used only within this compilation unit, and only for device code.
       }
 
     //MGCD1: [Find suitable moduli]
-    modulus_t q; 
-    initModulus(q);
+    modulus_t q = getModulus();
 
     //MGCD2: [Convert to modular representation]
 

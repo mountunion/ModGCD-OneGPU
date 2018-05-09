@@ -79,7 +79,7 @@ createModuli: createModuli.cpp GmpCudaModuli.h
 	$(CXX) $(CXXFLAGS) $< $(GMPL) -o $@
 
 clean:
-	rm *.o testmodgcd testmodgcd[0-9][0-9] || true
+	rm *.o testmodgcd testmodgcd-nogpu || true
 
 distclean: clean
 	rm createModuli || true

@@ -23,6 +23,5 @@ namespace GmpCuda
 //  constexpr int NUM_MODULI = 68181070; //  This is all the useable 32-bit moduli.
 #ifdef __CUDACC__
   extern __device__ const uint32_t moduliList[];
-  extern __device__ const uint64_t inverseModuliList[];
 #endif
 };
