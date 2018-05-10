@@ -29,7 +29,6 @@
 
 namespace GmpCuda
 {
-  constexpr int WARP_SZ = 32;  // GmpCudaDevice checks to see whether this is true.
   struct GmpCudaGcdStats
   {
     uint32_t
@@ -51,6 +50,7 @@ namespace GmpCuda
   {
   private:
     GmpCudaBarrier * barrier;
+    uint32_t* moduliList;
     struct GmpCudaGcdStats * stats;
     struct cudaDeviceProp props;
     int deviceNum;

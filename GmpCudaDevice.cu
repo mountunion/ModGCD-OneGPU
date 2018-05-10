@@ -90,6 +90,7 @@
 
 #include <cassert>
 #include "GmpCudaDevice.h"
+#include "GmpCudaModuli.h"
 using namespace GmpCuda;
 #include <iostream>
 
@@ -115,13 +116,18 @@ GmpCudaDevice::GmpCudaDevice(int n)
   initGcdOccupancy();
   
   //  Limit the grid--and the barrier size--to the number of SMs * kernel occupancy.
-  maxGridSize = props.multiProcessorCount * gcdOccupancy;
+  maxGridSize = min(BLOCK_SZ, props.multiProcessorCount * gcdOccupancy);
   if (0 < n && n < maxGridSize)
     maxGridSize = n;
     
   gridSize = maxGridSize;
 
   barrier = new GmpCudaBarrier(maxGridSize);
+  
+    //  Copy moduli to device.
+  size_t maxModuli = maxGridSize * BLOCK_SZ;
+  assert(cudaSuccess == cudaMalloc(&moduliList, maxModuli * sizeof(uint32_t)));
+  assert(cudaSuccess == cudaMemcpy(moduliList, moduli, maxModuli * sizeof(uint32_t), cudaMemcpyHostToDevice));
 }
 
 GmpCudaDevice::~GmpCudaDevice()

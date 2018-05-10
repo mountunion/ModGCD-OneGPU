@@ -47,10 +47,6 @@ namespace  //  used only within this compilation unit, and only for device code.
   constexpr uint32_t GCD_REDUX_ERROR    = 0;                    //  Error in reduction phase.
   constexpr uint32_t GCD_RECOVERY_ERROR = 1;                    //  Error in recovery phase.
 
-  // Adjust WARPS_PER_BLOCK to change the block size--don't change BLOCK_SZ directly.
-  // WARPS_PER_BLOCK must evenly divide WARP_SZ.
-  constexpr int WARPS_PER_BLOCK = WARP_SZ / 4;               //  Provides most flexibility. 
-  constexpr int BLOCK_SZ        = WARP_SZ * WARPS_PER_BLOCK;
 
   //  This type is used to pass back the gcd from the kernel as a list of pairs.
   typedef struct __align__(8) {uint32_t modulus; int32_t value;} pair_t;
@@ -650,7 +646,7 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
   
   int numModuliNeeded = numModuliNeededFor(ubits);
   
-  gridSize = min(min(numModuliNeeded/BLOCK_SZ, maxGridSize), BLOCK_SZ);
+  gridSize = min(numModuliNeeded/BLOCK_SZ, maxGridSize);
      
   int numThreads = BLOCK_SZ * gridSize;
 
@@ -660,11 +656,6 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
   if (numThreads > NUM_MODULI)
     throw std::runtime_error("Not enough moduli available for given input.");
     
-  //  Copy moduli to device.
-  uint32_t* moduliList;
-  assert(cudaSuccess == cudaMalloc(&moduliList, numThreads * sizeof(uint32_t)));
-  assert(cudaSuccess == cudaMemcpy(moduliList, moduli, numThreads * sizeof(uint32_t), cudaMemcpyHostToDevice));
-
   //  Allocate some extra space in the global buffer, so that modMP can assume it can safely read a multiple of
   //  warpSize words to get the entirety (+ more) of either parameter.
   uint32_t* globalBuf;

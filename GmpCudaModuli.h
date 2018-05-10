@@ -17,8 +17,14 @@
 
 namespace GmpCuda
 {
-  constexpr int L = 32;
-  constexpr int W = 64;
-  constexpr int NUM_MODULI = 1 << 17;  //  Largest possible is 68181070.
+  // Adjust WARPS_PER_BLOCK to change the block size--don't change BLOCK_SZ directly.
+  // WARPS_PER_BLOCK must evenly divide WARP_SZ.
+  constexpr int WARP_SZ = 32;  // GmpCudaDevice checks to see whether this is true.
+  constexpr int WARPS_PER_BLOCK = WARP_SZ / 4;               //  Provides most flexibility. 
+  constexpr int BLOCK_SZ        = WARP_SZ * WARPS_PER_BLOCK; 
+  constexpr int NUM_MODULI      = BLOCK_SZ * BLOCK_SZ;  //  Largest possible is 68181070.
+  constexpr int L               = 32;
+  constexpr int W               = 64;
+  
   extern const uint32_t moduli[];
 };
