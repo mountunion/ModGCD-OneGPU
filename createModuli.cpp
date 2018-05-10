@@ -1,6 +1,7 @@
 /* createModuli.cpp -- Program to generate moduli.h.
 
-  Prepares a declaration for an array of moduli and ancillary data needed to compute inverses.
+  Prepares a declaration for an array of moduli.
+  Inverses are NOT stored in the array; instead, they are computed at runtime.
   
   Uses Sieve of Eratosthenes to find primes.
 

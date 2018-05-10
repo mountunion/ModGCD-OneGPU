@@ -449,9 +449,8 @@ namespace  //  used only within this compilation unit, and only for device code.
   }
   
   
-  // Initialize modulus for this thread
-  // by reading a modulus m from the list and computing
-  // its inverse, which is 2^(W + L - 1) / m + 1.
+  // Initialize modulus for this thread by reading a modulus m from the list
+  // and computing its "inverse", mInverse == 2^(W + L - 1) / m + 1.
   __device__
   inline
   modulus_t
