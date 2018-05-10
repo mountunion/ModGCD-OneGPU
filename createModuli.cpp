@@ -29,7 +29,7 @@
 #include <cstdlib>
 #include <stdint.h>
 #include <gmp.h>
-#include "GmpCudaModuli.h"
+#include "GmpCudaConstants.h"
 
 using namespace std;
 using namespace GmpCuda;
@@ -135,7 +135,10 @@ int main(void)
          << "//      Efficient Algorithms for Integer Division by Constants Using Multiplication," << endl
          << "//      The Computer Journal, Vol. 51 No. 4, 2008." << endl
          << endl
-         << "#include \"GmpCudaModuli.h\"" << endl
+//         << "#include \"GmpCudaModuli.h\"" << endl
+//         << "const uint32_t GmpCuda::moduli[] = " << endl
+         << "#include <stdint.h>" << endl
+         << "namespace GmpCuda{extern const uint32_t moduli[];}" << endl
          << "const uint32_t GmpCuda::moduli[] = " << endl
          << "{" << endl;
     

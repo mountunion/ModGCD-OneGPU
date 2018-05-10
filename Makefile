@@ -54,7 +54,7 @@ testmodgcd: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice.o GmpCudaBarrier.o Gm
 testmodgcd-nogpu: testmodgcd.cpp GmpCudaDevice.h
 	$(CXX) $(CXXFLAGS) -DNO_GPU $< -o $@ $(GMPL)
 
-GmpCudaDevice.h: GmpCudaBarrier.h
+GmpCudaDevice.h: GmpCudaBarrier.h GmpCudaConstants.h
 	touch $@
 
 testmodgcd.o: testmodgcd.cpp GmpCudaDevice.h
@@ -66,16 +66,16 @@ GmpCudaBarrier.o: GmpCudaBarrier.cu GmpCudaBarrier.h
 GmpCudaDevice.o: GmpCudaDevice.cu GmpCudaDevice.h
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
-GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h GmpCudaModuli.h
+GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
-GmpCudaModuli.cu: createModuli GmpCudaModuli.h
+GmpCudaModuli.cu: createModuli GmpCudaConstants.h
 	./createModuli > $@
 
-GmpCudaModuli.o: GmpCudaModuli.cu GmpCudaModuli.h
+GmpCudaModuli.o: GmpCudaModuli.cu
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
-createModuli: createModuli.cpp GmpCudaModuli.h
+createModuli: createModuli.cpp GmpCudaConstants.h
 	$(CXX) $(CXXFLAGS) $< $(GMPL) -o $@
 
 clean:

@@ -30,7 +30,6 @@
 
 #include <cassert>
 #include "GmpCudaDevice.h"
-#include "GmpCudaModuli.h"
 using namespace GmpCuda;
 #include <iostream>
 

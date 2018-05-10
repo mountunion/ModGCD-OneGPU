@@ -20,6 +20,7 @@
 #include <cuda_runtime.h>
 #include <sstream>
 #include "GmpCudaBarrier.h"
+#include "GmpCudaConstants.h"
 
 //  Uncomment the following line if you want to use cooperative groups
 //  to perform grid-wide synchronization provided by CUDA 9.
@@ -45,6 +46,8 @@ namespace GmpCuda
       totalCycles;
     int clockRateInKHz;
   };
+  
+  extern const uint32_t moduli[];
 
   class GmpCudaDevice
   {
