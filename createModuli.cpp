@@ -135,8 +135,6 @@ int main(void)
          << "//      Efficient Algorithms for Integer Division by Constants Using Multiplication," << endl
          << "//      The Computer Journal, Vol. 51 No. 4, 2008." << endl
          << endl
-//         << "#include \"GmpCudaModuli.h\"" << endl
-//         << "const uint32_t GmpCuda::moduli[] = " << endl
          << "#include <stdint.h>" << endl
          << "namespace GmpCuda{extern const uint32_t moduli[];}" << endl
          << "const uint32_t GmpCuda::moduli[] = " << endl
@@ -150,7 +148,7 @@ int main(void)
   mpz_init(DJ_FC);
   mpz_init(Qcr);
   mpz_init(Ncr);
-  for (size_t i = 0; i < SIEVE_SZ; i += 1)
+  for (size_t i = 0; i < SIEVE_SZ  && numUsable < NUM_MODULI; i += 1)
     {
       if (sieve[i])
         continue;                       //  Composite--ignore.       
@@ -166,15 +164,17 @@ int main(void)
       if (mpz_sizeinbase(Ncr, 2) <= W)
         continue;                       //  Not usaable as modulus
       numUsable += 1;
-      if (numUsable <= NUM_MODULI)
-        cout << "\t" << D        << "," << endl;
+      cout << "\t" << D        << "," << endl;
     }
 
   cout << "};" << endl;
   
-  cerr << "There are " << numPrimes << " " << L << "-bit primes; "
-       << numUsable << " are usable as moduli," 
-       << " and " << NUM_MODULI << " moduli are called for."  << endl;
+  if (numUsable < NUM_MODULI)
+    cerr << "There are " << numPrimes << " " << L << "-bit primes; "
+         << numUsable << " are usable as moduli," 
+         << " and " << NUM_MODULI << " moduli are called for."  << endl;
+  else
+    cerr << NUM_MODULI << " moduli were generated." << endl;
        
   return (numUsable >= NUM_MODULI) ? 0 : 2;
 }
