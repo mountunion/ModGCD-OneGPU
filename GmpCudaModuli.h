@@ -19,9 +19,6 @@ namespace GmpCuda
 {
   constexpr int L = 32;
   constexpr int W = 64;
-  constexpr int NUM_MODULI = 1 << 17;
-//  constexpr int NUM_MODULI = 68181070; //  This is all the useable 32-bit moduli.
-#ifdef __CUDACC__
-  extern __device__ const uint32_t moduliList[];
-#endif
+  constexpr int NUM_MODULI = 1 << 17;  //  Largest possible is 68181070.
+  extern const uint32_t moduli[];
 };

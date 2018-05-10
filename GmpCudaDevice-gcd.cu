@@ -454,7 +454,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   __device__
   inline
   modulus_t
-  getModulus()
+  getModulus(uint32_t* moduliList)
   {
       uint32_t m = moduliList[blockDim.x * blockIdx.x + threadIdx.x];
       uint64_t D = static_cast<uint64_t>(m);
@@ -468,7 +468,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   template <bool STATS>
   __global__
   void
-  kernel(uint32_t* buf, size_t uSz, size_t vSz, GmpCudaBarrier bar, struct GmpCudaGcdStats* gStats = NULL)
+  kernel(uint32_t* buf, size_t uSz, size_t vSz, uint32_t* moduliList, GmpCudaBarrier bar, struct GmpCudaGcdStats* gStats = NULL)
   {
     int totalModuliRemaining = blockDim.x * gridDim.x;
     int ubits = (uSz + 1) * 32;  // somewhat of an overestimate
@@ -484,7 +484,7 @@ namespace  //  used only within this compilation unit, and only for device code.
       }
 
     //MGCD1: [Find suitable moduli]
-    modulus_t q = getModulus();
+    modulus_t q = getModulus(moduliList);
 
     //MGCD2: [Convert to modular representation]
 
@@ -659,6 +659,11 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
 
   if (numThreads > NUM_MODULI)
     throw std::runtime_error("Not enough moduli available for given input.");
+    
+  //  Copy moduli to device.
+  uint32_t* moduliList;
+  assert(cudaSuccess == cudaMalloc(&moduliList, numThreads * sizeof(uint32_t)));
+  assert(cudaSuccess == cudaMemcpy(moduliList, moduli, numThreads * sizeof(uint32_t), cudaMemcpyHostToDevice));
 
   //  Allocate some extra space in the global buffer, so that modMP can assume it can safely read a multiple of
   //  warpSize words to get the entirety (+ more) of either parameter.
@@ -674,14 +679,14 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
   barrier->reset();  //  Reset to use again.
 
 #ifdef USE_COOP_GROUPS
-  void* args[] = {&globalBuf, &uSz, &vSz, &*barrier, &stats};
+  void* args[] = {&globalBuf, &uSz, &vSz, &moduliList, &*barrier, &stats};
   void* kPtr   = reinterpret_cast<void *>((collectStats) ? kernel<true> : kernel<false>);
   assert(cudaSuccess == cudaLaunchCooperativeKernel(kPtr, gridSize, BLOCK_SZ, args));
 #else    
   if (collectStats)
-    kernel<true> <<<gridSize, BLOCK_SZ>>>(globalBuf, uSz, vSz, *barrier, stats);
+    kernel<true> <<<gridSize, BLOCK_SZ>>>(globalBuf, uSz, vSz, moduliList, *barrier, stats);
   else
-    kernel<false><<<gridSize, BLOCK_SZ>>>(globalBuf, uSz, vSz, *barrier);
+    kernel<false><<<gridSize, BLOCK_SZ>>>(globalBuf, uSz, vSz, moduliList, *barrier);
 #endif
 
   assert(cudaSuccess == cudaDeviceSynchronize());

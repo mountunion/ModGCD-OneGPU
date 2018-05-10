@@ -136,7 +136,7 @@ int main(void)
          << "//      The Computer Journal, Vol. 51 No. 4, 2008." << endl
          << endl
          << "#include \"GmpCudaModuli.h\"" << endl
-         << "__device__ const uint32_t GmpCuda::moduliList[] = " << endl
+         << "const uint32_t GmpCuda::moduli[] = " << endl
          << "{" << endl;
     
   //  Harvest primes from sieve and print out any usable ones.
