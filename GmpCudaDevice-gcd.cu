@@ -645,7 +645,7 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
   
   int numModuliNeeded = numModuliNeededFor(ubits);
   
-  gridSize = min(numModuliNeeded/BLOCK_SZ, maxGridSize);
+  gridSize = min(numModuliNeeded/BLOCK_SZ + ((numModuliNeeded%BLOCK_SZ) ? 1 : 0), maxGridSize);
      
   int numThreads = BLOCK_SZ * gridSize;
 

@@ -114,8 +114,9 @@ GmpCudaDevice::GmpCudaDevice(int n)
 
   initGcdOccupancy();
   
-  //  Limit the grid--and the barrier size--to the number of SMs * kernel occupancy.
+  //  Limit the grid, and thus, the barrier size.
   maxGridSize = min(BLOCK_SZ, props.multiProcessorCount * gcdOccupancy);
+    
   if (0 < n && n < maxGridSize)
     maxGridSize = n;
     

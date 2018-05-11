@@ -206,7 +206,7 @@ main(int argc, char *argv[])
   do
     {
       cout << "***************************** "
-           << "Input size = " << num_bits << "; gcd bits = " << num_g_bits
+           << "Input size = " << num_bits << " (" << num_bits/1024.0 << " Kibit); gcd bits = " << num_g_bits
            << " *****************************" << endl;
       if (collectStats)
         cout << "Test"    << "\t"
