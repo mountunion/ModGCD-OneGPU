@@ -223,52 +223,16 @@ namespace  //  used only within this compilation unit, and only for device code.
           sharedX[threadIdx.x / WARP_SZ] = x;
       }
 
-    switch  (numWarps)
+    __syncthreads();
+    if (threadIdx.x < WARP_SZ)
       {
-        default:  // For the unlikely cases where 256 < gridDim.x.
-          __syncthreads();
-          if (threadIdx.x < WARP_SZ)
-            {
-              x = (threadIdx.x < numWarps) ? sharedX[threadIdx.x] : UINT64_MAX;
-#pragma unroll
-              for (int i = WARPS_PER_BLOCK/2; i > 1; i /= 2)  //  assert(gridDim.x <= blockDim.x);
-                x = min(x, __shfl_down_sync(FULL_MASK, x, i));  
-              sharedX[threadIdx.x] = min(x, __shfl_down_sync(FULL_MASK, x, 1));                            
-           }
-          break;
-        //  Special cases will handle gridDim.x <= 256.
-        case 5: case 6: case 7: case 8:
-          __syncthreads();
-          if (threadIdx.x < 8)
-            {
-              x = (threadIdx.x < numWarps) ? sharedX[threadIdx.x] : UINT64_MAX;
-              x = min(x, __shfl_down_sync(0xFF, x, 4));        
-              x = min(x, __shfl_down_sync(0xFF, x, 2));  
-              sharedX[threadIdx.x] = min(x, __shfl_down_sync(0xFF, x, 1));      
-            }
-          break;
-        case 4:
-          __syncthreads();
-          if (threadIdx.x < 2)
-            {
-              x = min(sharedX[threadIdx.x], sharedX[threadIdx.x + 2]);  
-              sharedX[threadIdx.x] = min(x, __shfl_down_sync(0x3, x, 1));
-            }
-          break;
-        case 3:
-          __syncthreads();
-          if (threadIdx.x == 0)
-            sharedX[0] = min(min(x, sharedX[1]), sharedX[2]);
-          break;
-        case 2:
-          __syncthreads();
-          if (threadIdx.x == 0)
-            sharedX[0] = min(x, sharedX[1]);
-          break;
-        case 1:
-          break;
-      }
-      
+        x = (threadIdx.x < numWarps) ? sharedX[threadIdx.x] : UINT64_MAX;
+  #pragma unroll
+        for (int i = WARPS_PER_BLOCK/2; i > 1; i /= 2)  //  assert(gridDim.x <= blockDim.x);
+          x = min(x, __shfl_down_sync(FULL_MASK, x, i));  
+        sharedX[threadIdx.x] = min(x, __shfl_down_sync(FULL_MASK, x, 1));                            
+     }
+
     __syncthreads();
     x = sharedX[0];
     
