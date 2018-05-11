@@ -1,4 +1,4 @@
-/*  GmpCudaDevice-gcd.cu -- provides the gcdKernel needed by the GmpCudaDevice::gcd method.
+/*  GmpCudaGcdKernel.cu -- provides the gcdKernel needed by the GmpCudaDevice::gcd method.
 
   Implementation of the modular integer gcd algorithm using L <= 32 bit moduli.
   
@@ -368,8 +368,7 @@ namespace  //  used only within this compilation unit, and only for device code.
       result = mod(result << 32 | sharedX[i], m);
     return static_cast<uint32_t>(result);
   }
-  
-  
+   
   // Initialize modulus for this thread by reading a modulus m from the list
   // and computing its "inverse", mInverse == 2^(W + L - 1) / m + 1.
   __device__
@@ -386,7 +385,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   }
 }
 
-//  Entry point into device-only code.
+//  Entry point into device-only code for the GmpCudaDevice::gcd method.
 __global__
 void
 GmpCuda::gcdKernel(uint32_t* buf, size_t uSz, size_t vSz, uint32_t* moduliList, GmpCudaBarrier bar)
