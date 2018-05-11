@@ -30,46 +30,20 @@
 
 namespace GmpCuda
 {
-  struct GmpCudaGcdStats
-  {
-    uint32_t
-      blockDim,
-      reductionIterations,
-      mixedRadixIterations,
-      convertToModularCycles,
-      reductionCycles,
-      minPositiveCycles,
-      mixedRadixCycles,
-      anyPositiveCycles,
-      anyBarrierCycles,
-      minBarrierCycles,
-      totalCycles;
-    int clockRateInKHz;
-  };
-  
   extern const uint32_t moduli[];
-
+  extern __global__ void gcdKernel(uint32_t*, size_t, size_t, uint32_t*, GmpCudaBarrier);
+  typedef struct __align__(8) {uint32_t modulus; int32_t value;} pair_t;
   class GmpCudaDevice
   {
   private:
     GmpCudaBarrier * barrier;
     uint32_t* moduliList;
-    struct GmpCudaGcdStats * stats;
-    struct cudaDeviceProp props;
     int deviceNum;
-    int gridSize;
     int maxGridSize;
-    bool collectStats;
-    int gcdOccupancy;
-    void initGcdOccupancy();
   public:
     GmpCudaDevice(int);
     ~GmpCudaDevice();
     void gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error);
-    struct GmpCudaGcdStats getStats() const;
-    void inline setCollectStats(bool b){collectStats = b;}
-    bool inline getCollectStats() const {return collectStats;}
-    int inline getGridSize() const {return gridSize;}
-    int inline getClockRate() const {return props.clockRate;}
+    int inline getMaxGridSize() const {return maxGridSize;}
   };
 };

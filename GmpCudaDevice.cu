@@ -91,7 +91,6 @@
 #include <cassert>
 #include "GmpCudaDevice.h"
 using namespace GmpCuda;
-#include <iostream>
 
 //  Initialize the CUDA device.  The device to use can be set by cudaSetDevice.
 //  If 0 < n < the device's number of SMs,
@@ -99,29 +98,23 @@ using namespace GmpCuda;
 //  Also initializes the global barrier.
 GmpCudaDevice::GmpCudaDevice(int n)
 {
-
-  collectStats = false;  //  default.
-
-  deviceNum = 0;
   assert(cudaSuccess == cudaGetDevice(&deviceNum));
 
   //  Initialize the device properties values.
+  struct cudaDeviceProp props;
   assert(cudaSuccess == cudaGetDeviceProperties(&props, deviceNum));
 
   assert(props.warpSize == WARP_SZ);  //  Assume a fixed warp size of 32 for the forseeable future.
-
-  assert(cudaSuccess == cudaMalloc(&stats, sizeof(struct GmpCudaGcdStats)));
-
-  initGcdOccupancy();
   
+  assert(BLOCK_SZ <= props.maxThreadsPerBlock);
+
   //  Limit the grid, and thus, the barrier size.
-  maxGridSize = min(BLOCK_SZ, props.multiProcessorCount * gcdOccupancy);
-    
+  int gcdOccupancy;
+  assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&gcdOccupancy, gcdKernel, BLOCK_SZ, 0));
+  maxGridSize = min(BLOCK_SZ, props.multiProcessorCount * gcdOccupancy);    
   if (0 < n && n < maxGridSize)
     maxGridSize = n;
     
-  gridSize = maxGridSize;
-
   barrier = new GmpCudaBarrier(maxGridSize);
   
     //  Copy moduli to device.
@@ -132,14 +125,6 @@ GmpCudaDevice::GmpCudaDevice(int n)
 
 GmpCudaDevice::~GmpCudaDevice()
 {
-  assert(cudaSuccess == cudaFree(stats));
+  assert(cudaSuccess == cudaFree(moduliList));
   delete barrier;
-}
-
-struct GmpCudaGcdStats GmpCudaDevice::getStats() const
-{
-  struct GmpCudaGcdStats s;
-  assert(collectStats && cudaSuccess == cudaMemcpy(&s, stats, sizeof(s), cudaMemcpyDeviceToHost));
-  s.clockRateInKHz = props.clockRate;
-  return s;
 }

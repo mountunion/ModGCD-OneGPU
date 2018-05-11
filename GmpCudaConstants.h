@@ -23,6 +23,11 @@ namespace GmpCuda
   constexpr int WARPS_PER_BLOCK = WARP_SZ / 4;               //  Provides most flexibility. 
   constexpr int BLOCK_SZ        = WARP_SZ * WARPS_PER_BLOCK; 
   constexpr int NUM_MODULI      = BLOCK_SZ * BLOCK_SZ;  //  Largest possible is 68181070.
+
   constexpr int L               = 32;
   constexpr int W               = 64;
+
+  constexpr uint32_t GCD_KERNEL_ERROR   = 0;                    //  Error in the gcd kernel.
+  constexpr uint32_t GCD_REDUX_ERROR    = 0;                    //  Error in reduction phase.
+  constexpr uint32_t GCD_RECOVERY_ERROR = 1;                    //  Error in recovery phase.
 };

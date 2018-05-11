@@ -31,11 +31,10 @@
 
   Invocation:
 
-    testmgcd* [ s ] [ r ] [ i increment ] [ g grid_size ] num_bits [ gcd_size ]
+    testmgcd* [ r ] [ i increment ] [ g grid_size ] num_bits [ gcd_size ]
 
   where
     *           is the size of the moduli in bits,
-    s           is optional; it causes statistics on each modular gcd call to be printed.
     r           is optional; it causes the test to use random numbers. If left off the test will use test input in /tests. 
     If input does not exist in /tests for num_bits then random numbers will be generated and stored for future tests.
     Default is false.
@@ -86,31 +85,6 @@ using std::endl;
 using std::fixed;
 using std::setprecision;
 
-#if !defined(NO_GPU)
-struct MyGmpCudaGcdStats : public GmpCuda::GmpCudaGcdStats
-{
-  MyGmpCudaGcdStats(const GmpCudaGcdStats& rhs) : GmpCudaGcdStats(rhs) {}
-  float cyclesToMS(uint32_t cycles){return cycles * uint64_t{1000000} / clockRateInKHz / 1e6;}
-  void printLine(int i, int g)
-  {
-     cout << fixed << setprecision(3)
-           << i                                  << "\t"
-           << blockDim                           << "\t"
-           << blockDim * g                       << "\t"
-           << cyclesToMS(convertToModularCycles) << "\t"
-           << reductionIterations                << "\t"
-           << cyclesToMS(reductionCycles)        << "\t"
-           << cyclesToMS(minPositiveCycles)      << "\t"
-           << cyclesToMS(minBarrierCycles)       << "\t"
-           << mixedRadixIterations               << "\t"
-           << cyclesToMS(mixedRadixCycles)       << "\t"
-           << cyclesToMS(anyPositiveCycles)      << "\t"
-           << cyclesToMS(anyBarrierCycles)       << "\t"
-           << cyclesToMS(totalCycles)            << endl;
-  }
-};
-#endif
-
 int
 main(int argc, char *argv[])
 {
@@ -118,22 +92,15 @@ main(int argc, char *argv[])
   unsigned int num_g_bits = 1;
   unsigned int increment = 0;
   unsigned int gridSize = 0;
-  bool collectStats = false;
   bool random = false;
   bool newFile = false;
 
   if (argc == 1)
     {
-      cout << "Usage: " << basename(argv[0]) << " [ s ] [ r ] [ i increment ] [ g grid_size ] num_bits [ gcd_size ]" << endl;
+      cout << "Usage: " << basename(argv[0]) << " [ r ] [ i increment ] [ g grid_size ] num_bits [ gcd_size ]" << endl;
       return 0;
     }
 
-  if (argv[1][0] == 's')
-    {
-      collectStats = true;
-      argc -= 1;
-      argv += 1;
-    }
   if (argv[1][0] == 'r')
     {
       random = true;
@@ -160,38 +127,26 @@ main(int argc, char *argv[])
     }
 
 
+  cout << "GMP version " << gmp_version << "." << endl;
+  
+#if defined(NO_GPU)
+  cout << "Executing tests only on CPU." << endl;
+#else
   int cnt;
   int devNo = 0;
-#if defined(NO_GPU)
-  cout << "Executing tests only on CPU" << endl;
-#else
   cudaGetDeviceCount(&cnt);
   if ( cudaSuccess != cudaSetDevice(devNo)) {
     cout << "Error on cuda set device" << endl;
     exit(2);
   }
-  cout << "Using device " << devNo << endl;
-  cout << "Cuda device count = " << cnt << endl;
-#endif
-
   time_t ttime;
-
   ttime = -monotonicTime();
-#if !defined(NO_GPU)
   GmpCuda::GmpCudaDevice dev(gridSize);
-#endif
   ttime += monotonicTime();
-
-#if defined(NO_GPU)
-  collectStats = false;
-#else
-  dev.setCollectStats(collectStats);
-
-  cout << endl
-       << "GMP version " << gmp_version
-       << "; initialization time: " << ttime/1e6 << " ms."
-       << endl
-       << "Grid size = " << dev.getGridSize() << endl;
+  cout << "Using device " << devNo
+       << "; Cuda device count = " << cnt
+       << "; max grid size = " << dev.getMaxGridSize() << endl;
+  cout << "Initialization time: " << ttime/1e6 << " ms." << endl;
 #endif
 
   mpz_t u, v, g, mod_g;
@@ -208,33 +163,6 @@ main(int argc, char *argv[])
       cout << "***************************** "
            << "Input size = " << num_bits << " (" << num_bits/1024.0 << " Kibit); gcd bits = " << num_g_bits
            << " *****************************" << endl;
-      if (collectStats)
-        cout << "Test"    << "\t"
-             << "block"   << "\t"
-             << "number"  << "\t"
-             << "convert" << "\t"
-             << "reduct"  << "\t"
-             << "reduct"  << "\t"
-             << "min"     << "\t"
-             << "min bar" << "\t"
-             << "mixed"   << "\t"
-             << "mixed"   << "\t"
-             << "any"     << "\t"
-             << "any bar" << "\t"
-             << "total"   << endl
-             << "number"  << "\t"
-             << "size"    << "\t"
-             << "moduli"  << "\t"
-             << "time-ms" << "\t"
-             << "iter"    << "\t"
-             << "time-ms" << "\t"
-             << "time-ms" << "\t"
-             << "time-ms" << "\t"
-             << "iter"    << "\t"
-             << "time-ms" <<  "\t"
-             << "time-ms" << "\t"
-             << "time-ms" << "\t"
-             << "time-ms" << endl;
       time_t atime = time_t{0};
       time_t mtime = time_t{0};
       int numErrs = 0;
@@ -342,12 +270,6 @@ main(int argc, char *argv[])
             {
               cout << e.what() << endl;
               return 0;
-            }
-
-          if (collectStats)
-            {
-              struct MyGmpCudaGcdStats s(dev.getStats());
-              s.printLine(i, dev.getGridSize());
             }
 
           if (mpz_cmp(g, mod_g)!= 0)
