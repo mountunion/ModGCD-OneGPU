@@ -22,8 +22,7 @@
 
 #include <cassert>
 #include <cuda_runtime.h>
-#include "GmpCudaBarrier.h"
-#include <iostream>
+#include "GmpCuda.h"
 using namespace GmpCuda;
 
 //  Initialize the base pointer for the global barrier.

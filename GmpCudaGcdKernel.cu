@@ -29,21 +29,25 @@
 #endif
 
 #include <cassert>
-#include "GmpCudaDevice.h"
+#include "GmpCuda.h"
 using namespace GmpCuda;
+#include "GmpCudaGcd.h"
 #ifdef USE_COOP_GROUPS
 #include <cooperative_groups.h>
 #endif
 
 namespace  //  used only within this compilation unit.
 {
+
+  constexpr int WARP_SZ           = GmpCudaDevice::WARP_SZ;
+  constexpr int WARPS_PER_BLOCK   = GmpCudaDevice::WARPS_PER_BLOCK;  
   constexpr unsigned FULL_MASK    = 0xFFFFFFFF;           //  Used in sync functions.
   constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
   constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
 
   //  This type is used to conveniently manipulate the modulus and its inverse.
   typedef struct {uint32_t modulus; uint64_t inverse;} modulus_t;
-
+  
   //  Posts to the barrier one of the pair parameters whose value is not 0.
   //  If no such value is found, a pair with a 0 value is posted.
   //  Preconditions:  all threads in block participate.
@@ -391,105 +395,111 @@ namespace  //  used only within this compilation unit.
       uint64_t r = FC_hi % D;
       return {m, uint64_t{1} + (q << L) + (r << L) / D};
   }
-}
 
-//  Entry point into device-only code for the GmpCudaDevice::gcd method.
-__global__
-void
-GmpCuda::gcdKernel(uint32_t* buf, size_t uSz, size_t vSz, uint32_t* moduliList, GmpCudaBarrier bar)
-{
-  int totalModuliRemaining = blockDim.x * gridDim.x;
-  int ubits = (uSz + 1) * 32;  // somewhat of an overestimate
-  int vbits = (vSz + 1) * 32;  // same here
-  
-  //MGCD1: [Find suitable moduli]
-  modulus_t q = getModulus(moduliList);
+  //  Entry point into device-only code for the GmpCudaDevice::gcd method.
+  __global__
+  void
+  gcdKernel(uint32_t* buf, size_t uSz, size_t vSz, uint32_t* moduliList, GmpCudaBarrier bar)
+  {
+    int totalModuliRemaining = blockDim.x * gridDim.x;
+    int ubits = (uSz + 1) * 32;  // somewhat of an overestimate
+    int vbits = (vSz + 1) * 32;  // same here
+    
+    //MGCD1: [Find suitable moduli]
+    modulus_t q = getModulus(moduliList);
 
-  //MGCD2: [Convert to modular representation]
+    //MGCD2: [Convert to modular representation]
 
-  uint32_t uq, vq;
-  uq = modMP(buf,       uSz, q);
-  vq = modMP(buf + uSz, vSz, q);
+    uint32_t uq, vq;
+    uq = modMP(buf,       uSz, q);
+    vq = modMP(buf + uSz, vSz, q);
 
-  //MGCD3: [reduction loop]
+    //MGCD3: [reduction loop]
 
-  bool active = true;  //  Is the modulus owned by this thread active, or has it been retired?
+    bool active = true;  //  Is the modulus owned by this thread active, or has it been retired?
 
-  pair_t pair, myPair;
-  myPair.modulus = q.modulus;
-  myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv(uq, vq, q), q);
-  postMinPair(myPair, bar);
-  collectMinPair(pair, bar);
-  
-  do
-    {
-      uint32_t p, tq;
-      int tbits;
-      if (equals(pair.modulus, q))  //  Deactivate this modulus.
-        active = false, myPair.value = MOD_INFINITY;
-      if (active)
-        {
-          p = pair.modulus;
-          if (p > q.modulus)        //  Bring within range.
-            p -= q.modulus;
-          tq = modDiv(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
-          myPair.value = (tq == 0) ? MOD_INFINITY : toSigned(modDiv(vq, tq, q), q);
-        }
-      postMinPair(myPair, bar);
-      if (active)
-        uq = vq, vq = tq;       
-      totalModuliRemaining -= 1;
-      tbits = ubits - (L - 1) + __ffs(abs(pair.value));
-      ubits = vbits, vbits = tbits;
-      if (totalModuliRemaining * (L - 2) <= ubits)  //  Ran out of moduli--means initial estimate was wrong.
-        {
-          if (blockIdx.x && threadIdx.x)
+    pair_t pair, myPair;
+    myPair.modulus = q.modulus;
+    myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv(uq, vq, q), q);
+    postMinPair(myPair, bar);
+    collectMinPair(pair, bar);
+    
+    do
+      {
+        uint32_t p, tq;
+        int tbits;
+        if (equals(pair.modulus, q))  //  Deactivate this modulus.
+          active = false, myPair.value = MOD_INFINITY;
+        if (active)
+          {
+            p = pair.modulus;
+            if (p > q.modulus)        //  Bring within range.
+              p -= q.modulus;
+            tq = modDiv(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
+            myPair.value = (tq == 0) ? MOD_INFINITY : toSigned(modDiv(vq, tq, q), q);
+          }
+        postMinPair(myPair, bar);
+        if (active)
+          uq = vq, vq = tq;       
+        totalModuliRemaining -= 1;
+        tbits = ubits - (L - 1) + __ffs(abs(pair.value));
+        ubits = vbits, vbits = tbits;
+        if (totalModuliRemaining * (L - 2) <= ubits)  //  Ran out of moduli--means initial estimate was wrong.
+          {
+            if (blockIdx.x && threadIdx.x)
+              return;
+            buf[0] = GCD_KERNEL_ERROR, buf[1] = GCD_REDUX_ERROR;
             return;
-          buf[0] = GCD_KERNEL_ERROR, buf[1] = GCD_REDUX_ERROR;
-          return;
-        }        
-      collectMinPair(pair, bar);
-    }
-  while (pair.value != MOD_INFINITY);
-   
-  //MGCD4: [Find SIGNED mixed-radix representation] Each "digit" is either positive or negative.
+          }        
+        collectMinPair(pair, bar);
+      }
+    while (pair.value != MOD_INFINITY);
+     
+    //MGCD4: [Find SIGNED mixed-radix representation] Each "digit" is either positive or negative.
 
-  pair_t* pairs = (pair_t *)buf + 1;
+    pair_t* pairs = (pair_t *)buf + 1;
 
-  myPair.value = (active) ? toSigned(uq, q) : 0;  //  Inactive threads should have low priority.
+    myPair.value = (active) ? toSigned(uq, q) : 0;  //  Inactive threads should have low priority.
 
-  postAnyPairPriorityNonzero(myPair, bar);
+    postAnyPairPriorityNonzero(myPair, bar);
 
-  collectAnyPairPriorityNonzero(pair, bar);
+    collectAnyPairPriorityNonzero(pair, bar);
 
-  do
-    {
-      if (equals(pair.modulus, q))  //  deactivate modulus.
-        active = false, myPair.value = 0;
-      if (active)
-        {
-          uint32_t p = pair.modulus;
-          if (pair.modulus > q.modulus)  //  Bring within range.
-            p -= q.modulus;
-          uq = modDiv(modSub(uq, fromSigned(pair.value, q), q), p, q);
-          myPair.value = toSigned(uq, q);
-        }
-      postAnyPairPriorityNonzero(myPair, bar);
-      *pairs++ = pair;
-      totalModuliRemaining -= 1;
-      if (totalModuliRemaining <= 0)  //  Something went wrong.
-        break;
-      collectAnyPairPriorityNonzero(pair, bar);
-    }
-  while (pair.value != 0);
+    do
+      {
+        if (equals(pair.modulus, q))  //  deactivate modulus.
+          active = false, myPair.value = 0;
+        if (active)
+          {
+            uint32_t p = pair.modulus;
+            if (pair.modulus > q.modulus)  //  Bring within range.
+              p -= q.modulus;
+            uq = modDiv(modSub(uq, fromSigned(pair.value, q), q), p, q);
+            myPair.value = toSigned(uq, q);
+          }
+        postAnyPairPriorityNonzero(myPair, bar);
+        *pairs++ = pair;
+        totalModuliRemaining -= 1;
+        if (totalModuliRemaining <= 0)  //  Something went wrong.
+          break;
+        collectAnyPairPriorityNonzero(pair, bar);
+      }
+    while (pair.value != 0);
 
-  if (blockIdx.x | threadIdx.x)  //  Final cleanup by just one thread.
-    return;
+    if (blockIdx.x | threadIdx.x)  //  Final cleanup by just one thread.
+      return;
 
-  //  Return a count of all the nonzero pairs, plus one more "pair" that includes buf[0] itself.
-  //  If there aren't enough moduli to recover the result, return error codes.
-  if (pair.value != 0) 
-    buf[0] = GCD_KERNEL_ERROR, buf[1] = GCD_RECOVERY_ERROR;
-  else
-    buf[0] = pairs - reinterpret_cast<pair_t*>(buf);   
+    //  Return a count of all the nonzero pairs, plus one more "pair" that includes buf[0] itself.
+    //  If there aren't enough moduli to recover the result, return error codes.
+    if (pair.value != 0) 
+      buf[0] = GCD_KERNEL_ERROR, buf[1] = GCD_RECOVERY_ERROR;
+    else
+      buf[0] = pairs - reinterpret_cast<pair_t*>(buf);   
+  }
 }
+
+GmpCudaDevice::GcdKernelPtr_t GmpCudaDevice::getGcdKernelPtr(void)
+{
+  return &gcdKernel;
+}
+

@@ -89,7 +89,8 @@
 #endif
 
 #include <cassert>
-#include "GmpCudaDevice.h"
+#include <cuda_runtime.h>
+#include "GmpCuda.h"
 using namespace GmpCuda;
 
 //  Initialize the CUDA device.  The device to use can be set by cudaSetDevice.
@@ -98,6 +99,8 @@ using namespace GmpCuda;
 //  Also initializes the global barrier.
 GmpCudaDevice::GmpCudaDevice(int n)
 {
+  static GcdKernelPtr_t gcdKernelPtr = getGcdKernelPtr();
+
   assert(cudaSuccess == cudaGetDevice(&deviceNum));
 
   //  Initialize the device properties values.
@@ -110,7 +113,7 @@ GmpCudaDevice::GmpCudaDevice(int n)
 
   //  Limit the grid, and thus, the barrier size.
   int gcdOccupancy;
-  assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&gcdOccupancy, gcdKernel, BLOCK_SZ, 0));
+  assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&gcdOccupancy, gcdKernelPtr, BLOCK_SZ, 0));
   maxGridSize = min(BLOCK_SZ, props.multiProcessorCount * gcdOccupancy);    
   if (0 < n && n < maxGridSize)
     maxGridSize = n;

@@ -29,7 +29,9 @@
 #endif
 
 #include <cassert>
-#include "GmpCudaDevice.h"
+#include <cuda_runtime.h>
+#include "GmpCuda.h"
+#include "GmpCudaGcd.h"
 using namespace GmpCuda;
 #ifdef USE_COOP_GROUPS
 #include <cooperative_groups.h>
@@ -53,13 +55,15 @@ int
 numModuliNeededFor(size_t numBits)
 {
   constexpr float MODULI_MULTIPLIER = 1.6 - 0.015 * L; 
-  return roundUp(static_cast<int>(ceil(MODULI_MULTIPLIER * numBits / logf(numBits))), BLOCK_SZ);
+  return roundUp(static_cast<int>(ceil(MODULI_MULTIPLIER * numBits / logf(numBits))), GmpCudaDevice::BLOCK_SZ);
 }
 
 void
 __host__
 GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
 {
+  static GcdKernelPtr_t gcdKernelPtr = getGcdKernelPtr();
+
   if(mpz_cmp(u, v) < 0)
     mpz_swap(u, v);
 
@@ -100,9 +104,9 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
 
 #ifdef USE_COOP_GROUPS
   void* args[] = {&globalBuf, &uSz, &vSz, &moduliList, &*barrier};
-  assert(cudaSuccess == cudaLaunchCooperativeKernel(gcdKernel, gridSize, BLOCK_SZ, args));
+  assert(cudaSuccess == cudaLaunchCooperativeKernel(gcdKernelPtr, gridSize, BLOCK_SZ, args));
 #else    
-  gcdKernel<<<gridSize, BLOCK_SZ>>>(globalBuf, uSz, vSz, moduliList, *barrier);
+  (*gcdKernelPtr)<<<gridSize, BLOCK_SZ>>>(globalBuf, uSz, vSz, moduliList, *barrier);
 #endif
 
   assert(cudaSuccess == cudaDeviceSynchronize());

@@ -58,7 +58,8 @@
 #endif
 
 #if !defined(NO_GPU)
-#include "GmpCudaDevice.h"
+#include <cuda_runtime.h>
+#include "GmpCuda.h"
 #endif
 #include <iostream>
 #include <iomanip>

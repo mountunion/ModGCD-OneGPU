@@ -51,34 +51,31 @@ testmodgcd: testmodgcd.o GmpCudaGcdKernel.o GmpCudaDevice-gcd.o GmpCudaDevice.o 
 ##
 ##  This target will only use Gnu MP and no GPU.
 ##  
-testmodgcd-nogpu: testmodgcd.cpp GmpCudaDevice.h
+testmodgcd-nogpu: testmodgcd.cpp GmpCuda.h
 	$(CXX) $(CXXFLAGS) -DNO_GPU $< -o $@ $(GMPL)
 
-GmpCudaDevice.h: GmpCudaBarrier.h GmpCudaConstants.h
-	touch $@
-
-testmodgcd.o: testmodgcd.cpp GmpCudaDevice.h
+testmodgcd.o: testmodgcd.cpp GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -c $<
 
-GmpCudaBarrier.o: GmpCudaBarrier.cu GmpCudaBarrier.h
+GmpCudaBarrier.o: GmpCudaBarrier.cu GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
-GmpCudaDevice.o: GmpCudaDevice.cu GmpCudaDevice.h
+GmpCudaDevice.o: GmpCudaDevice.cu GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
-GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCudaDevice.h
+GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCuda.h GmpCudaGcd.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
-GmpCudaGcdKernel.o: GmpCudaGcdKernel.cu GmpCudaDevice.h
+GmpCudaGcdKernel.o: GmpCudaGcdKernel.cu GmpCuda.h GmpCudaGcd.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
-GmpCudaModuli.cu: createModuli GmpCudaConstants.h
+GmpCudaModuli.cu: createModuli GmpCuda.h
 	./createModuli > $@
 
 GmpCudaModuli.o: GmpCudaModuli.cu
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
-createModuli: createModuli.cpp GmpCudaConstants.h
+createModuli: createModuli.cpp GmpCuda.h
 	$(CXX) $(CXXFLAGS) $< $(GMPL) -o $@
 
 clean:
