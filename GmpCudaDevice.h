@@ -22,12 +22,6 @@
 #include "GmpCudaBarrier.h"
 #include "GmpCudaConstants.h"
 
-//  Uncomment the following line if you want to use cooperative groups
-//  to perform grid-wide synchronization provided by CUDA 9.
-//  Otherwise, a simple custom busy-wait barrier is used.
-
-//#define USE_COOP_GROUPS
-
 namespace GmpCuda
 {
   extern const uint32_t moduli[];

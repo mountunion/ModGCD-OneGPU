@@ -35,7 +35,7 @@ using namespace GmpCuda;
 #include <cooperative_groups.h>
 #endif
 
-namespace  //  used only within this compilation unit, and only for device code.
+namespace  //  used only within this compilation unit.
 {
   constexpr unsigned FULL_MASK    = 0xFFFFFFFF;           //  Used in sync functions.
   constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
@@ -73,7 +73,6 @@ namespace  //  used only within this compilation unit, and only for device code.
   //  If there are no nonzero values, a pair with value 0 is returned.
   //  Preconditions:  all threads in block participate.
   //  Postcondition: every thread will have the same pair.
-  static
   __device__
   void
   collectAnyPairPriorityNonzero(pair_t& pair, GmpCudaBarrier &bar)
@@ -211,6 +210,7 @@ namespace  //  used only within this compilation unit, and only for device code.
 
   //  Determines whether the modulus is equal to x.
   __device__
+  inline
   bool
   equals(uint32_t x, modulus_t &m)
   {
@@ -220,6 +220,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   //  Return a - b (mod m) in the range 0..m-1.
   //  Precondition: a, b are both in the range 0..m-1.
   __device__
+  inline
   uint32_t
   modSub(uint32_t a, uint32_t b, modulus_t m)
   {
@@ -228,6 +229,7 @@ namespace  //  used only within this compilation unit, and only for device code.
 
   //  Calculate x mod m, where x is 64 bits long.
   __device__
+  inline
   uint32_t
   mod(uint64_t x, modulus_t m)
   {
@@ -237,6 +239,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   //  Return a * b (mod m) in the range 0..m-1.
   //  Precondition: a, b are both in the range 0..m-1, and m is prime.
   __device__
+  inline
   uint32_t
   modMul(uint32_t a, uint32_t b, modulus_t m)
   {
@@ -244,6 +247,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   }
 
   __device__
+  inline
   uint32_t
   fromSigned(int32_t x, modulus_t m)
   {
@@ -252,6 +256,7 @@ namespace  //  used only within this compilation unit, and only for device code.
 
   // Give x mod m as a signed value in the range [-modulus/2, modulus,2]
   __device__
+  inline
   int32_t
   toSigned(uint32_t x, modulus_t m)
   {
@@ -265,6 +270,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   //  2 ulp <= 1.0, so__fdividef should give a result within +/-1
   //  of the true quotient.
   __device__
+  inline
   uint32_t
   quoRem(float& x, float y)
   {
@@ -279,6 +285,7 @@ namespace  //  used only within this compilation unit, and only for device code.
   }
 
   __device__
+  inline
   uint32_t
   quoRem(uint32_t& x, uint32_t y)
   {
@@ -332,6 +339,7 @@ namespace  //  used only within this compilation unit, and only for device code.
 
   // Calculate u/v mod m, in the range [0,m-1]
   __device__
+  inline
   uint32_t
   modDiv(uint32_t u, uint32_t v, modulus_t m)
   {
