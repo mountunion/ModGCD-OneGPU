@@ -59,7 +59,6 @@
 
 #if !defined(NO_GPU)
 #include <cuda_runtime.h>
-#include "GmpCuda.h"
 #endif
 #include <iostream>
 #include <iomanip>
@@ -67,9 +66,8 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string>
-#include <stdio.h>
 #include <sys/stat.h>
-#include <gmp.h>
+#include "GmpCuda.h"
 
 inline time_t monotonicTime(void)
 {
@@ -126,7 +124,6 @@ main(int argc, char *argv[])
       case 3: sscanf(argv[2], "%u", &num_g_bits);
       case 2: sscanf(argv[1], "%u", &num_bits);
     }
-
 
   cout << "GMP version " << gmp_version << "." << endl;
   

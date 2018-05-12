@@ -1,7 +1,5 @@
-/*  GmpCudaDevice.h -- provides declarations for the GmpCudaDevice class.
+/*  GmpCuda.h -- provides all declarations for the GmpCuda namespace.
 
-  Constructor and other methods are declared in GmpCudaDevice.cu.
-  GmpCudaDevice::gcd is declared in GmpCudaDevice-gcd.cu.
 
   Based on initial work by
   Authors: Justin Brew, Anthony Rizzo, Kenneth Weber
@@ -17,7 +15,6 @@
 #include <gmp.h>
 #include <stdint.h>
 #include <stdexcept>
-#include <sstream>
 
 //  Uncomment the following line if you want to use cooperative groups
 //  to perform grid-wide synchronization provided by CUDA 9.

@@ -1,4 +1,4 @@
-/*  GmpCudaGcdKernel.cu -- provides the gcdKernel needed by the GmpCudaDevice::gcd method.
+/*  GmpCudaDevice-getGcdKernelPtr.cu -- provides the gcdKernel needed by the GmpCudaDevice::gcd method.
 
   Implementation of the modular integer gcd algorithm using L <= 32 bit moduli.
   
@@ -31,7 +31,7 @@
 #include <cassert>
 #include "GmpCuda.h"
 using namespace GmpCuda;
-#include "GmpCudaGcd.h"
+#include "GmpCudaDevice-gcd.h"
 #ifdef USE_COOP_GROUPS
 #include <cooperative_groups.h>
 #endif

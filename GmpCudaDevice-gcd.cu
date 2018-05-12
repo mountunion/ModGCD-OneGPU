@@ -31,7 +31,7 @@
 #include <cassert>
 #include <cuda_runtime.h>
 #include "GmpCuda.h"
-#include "GmpCudaGcd.h"
+#include "GmpCudaDevice-gcd.h"
 using namespace GmpCuda;
 #ifdef USE_COOP_GROUPS
 #include <cooperative_groups.h>

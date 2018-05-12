@@ -45,7 +45,7 @@ static:
 	$(MAKE) clean
 	$(MAKE) GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)" CXXFLAGS="-static-libstdc++ $(CXXFLAGS)"
 
-testmodgcd: testmodgcd.o GmpCudaGcdKernel.o GmpCudaDevice-gcd.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
+testmodgcd: testmodgcd.o GmpCudaDevice-getGcdKernelPtr.o GmpCudaDevice-gcd.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
 
 ##
@@ -63,16 +63,16 @@ GmpCudaBarrier.o: GmpCudaBarrier.cu GmpCuda.h
 GmpCudaDevice.o: GmpCudaDevice.cu GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -c $< -o $@
 
-GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCuda.h GmpCudaGcd.h
+GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCuda.h GmpCudaDevice-gcd.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
-GmpCudaGcdKernel.o: GmpCudaGcdKernel.cu GmpCuda.h GmpCudaGcd.h
+GmpCudaDevice-getGcdKernelPtr.o: GmpCudaDevice-getGcdKernelPtr.cu GmpCuda.h GmpCudaDevice-gcd.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
 GmpCudaModuli.cu: createModuli GmpCuda.h
 	./createModuli > $@
 
-GmpCudaModuli.o: GmpCudaModuli.cu
+GmpCudaModuli.o: GmpCudaModuli.cu GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
 
 createModuli: createModuli.cpp GmpCuda.h
