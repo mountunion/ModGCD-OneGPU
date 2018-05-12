@@ -30,11 +30,8 @@
 
 #include <cassert>
 #include "GmpCuda.h"
-using namespace GmpCuda;
 #include "GmpCudaDevice-gcd.h"
-#ifdef USE_COOP_GROUPS
-#include <cooperative_groups.h>
-#endif
+using namespace GmpCuda;
 
 namespace  //  used only within this compilation unit.
 {

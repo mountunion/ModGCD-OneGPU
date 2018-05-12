@@ -91,6 +91,9 @@
 #include <cassert>
 #include <cuda_runtime.h>
 #include "GmpCuda.h"
+#if defined(USE_COOP_GROUPS)
+#include <iostream>
+#endif
 using namespace GmpCuda;
 
 //  Initialize the CUDA device.  The device to use can be set by cudaSetDevice.
@@ -110,6 +113,11 @@ GmpCudaDevice::GmpCudaDevice(int n)
   assert(props.warpSize == WARP_SZ);  //  Assume a fixed warp size of 32 for the forseeable future.
   
   assert(BLOCK_SZ <= props.maxThreadsPerBlock);
+  
+#if defined(USE_COOP_GROUPS)
+  deviceSupportsCooperativeLaunch = (props.cooperativeLaunch == 1);
+  std::cerr << "Using cooperative groups if device supports it." << std::endl;
+#endif
 
   //  Limit the grid, and thus, the barrier size.
   int gcdOccupancy;

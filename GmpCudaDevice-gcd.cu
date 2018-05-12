@@ -33,9 +33,6 @@
 #include "GmpCuda.h"
 #include "GmpCudaDevice-gcd.h"
 using namespace GmpCuda;
-#ifdef USE_COOP_GROUPS
-#include <cooperative_groups.h>
-#endif
 
 // Round x up to the next larger multiple of b.
 // Precondition: T must be an integral type, and x >= 0.
@@ -102,12 +99,15 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
 
   barrier->reset();  //  Reset to use again.
 
-#ifdef USE_COOP_GROUPS
-  void* args[] = {&globalBuf, &uSz, &vSz, &moduliList, &*barrier};
-  assert(cudaSuccess == cudaLaunchCooperativeKernel(gcdKernelPtr, gridSize, BLOCK_SZ, args));
-#else    
-  (*gcdKernelPtr)<<<gridSize, BLOCK_SZ>>>(globalBuf, uSz, vSz, moduliList, *barrier);
+#if defined(USE_COOP_GROUPS)
+  if(deviceSupportsCooperativeLaunch)
+  {
+    void* args[] = {&globalBuf, &uSz, &vSz, &moduliList, &*barrier};
+    assert(cudaSuccess == cudaLaunchCooperativeKernel(reinterpret_cast<void *>(gcdKernelPtr), gridSize, BLOCK_SZ, args));
+  }
+  else  
 #endif
+    (*gcdKernelPtr)<<<gridSize, BLOCK_SZ>>>(globalBuf, uSz, vSz, moduliList, *barrier);
 
   assert(cudaSuccess == cudaDeviceSynchronize());
 

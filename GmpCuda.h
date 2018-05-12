@@ -19,12 +19,12 @@
 //  Uncomment the following line if you want to use cooperative groups
 //  to perform grid-wide synchronization provided by CUDA 9.
 //  Otherwise, a simple custom busy-wait barrier is used.
-#ifdef __CUDACC__
 //#define USE_COOP_GROUPS
-#endif
 
 #ifdef USE_COOP_GROUPS
+#ifdef __CUDACC__
 #include <cooperative_groups.h>
+#endif
 #endif
 
 namespace GmpCuda
@@ -74,7 +74,7 @@ namespace GmpCuda
     //  No __syncthreads() done here--caller generally should.
     __device__ inline void collect(uint64_t& out)
     {
-#ifdef USE_COOP_GROUPS
+#if defined(USE_COOP_GROUPS) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600
       cooperative_groups::this_grid().sync();   
       if (threadIdx.x < gridDim.x)
         {
@@ -103,6 +103,9 @@ namespace GmpCuda
     uint32_t* moduliList;
     int deviceNum;
     int maxGridSize;
+#if defined(USE_COOP_GROUPS)
+    bool deviceSupportsCooperativeLaunch;
+#endif
   public:
     // Adjust WARPS_PER_BLOCK to change the block size--don't change BLOCK_SZ directly.
     // WARPS_PER_BLOCK must evenly divide WARP_SZ.
