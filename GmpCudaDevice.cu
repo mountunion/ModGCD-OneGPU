@@ -91,19 +91,12 @@
 #include <cassert>
 #include <cuda_runtime.h>
 #include "GmpCuda.h"
-#if defined(USE_COOP_GROUPS)
-#include <iostream>
-#endif
 using namespace GmpCuda;
 
 //  Initialize the CUDA device.  The device to use can be set by cudaSetDevice.
-//  If 0 < n < the device's number of SMs,
-//  the device's number of SMs is changed to n.
 //  Also initializes the global barrier.
-GmpCudaDevice::GmpCudaDevice(int n)
+GmpCudaDevice::GmpCudaDevice(void)
 {
-  static GcdKernelPtr_t gcdKernelPtr = getGcdKernelPtr();
-
   assert(cudaSuccess == cudaGetDevice(&deviceNum));
 
   //  Initialize the device properties values.
@@ -112,24 +105,17 @@ GmpCudaDevice::GmpCudaDevice(int n)
 
   assert(props.warpSize == WARP_SZ);  //  Assume a fixed warp size of 32 for the forseeable future.
   
-  assert(BLOCK_SZ <= props.maxThreadsPerBlock);
+  assert(GCD_BLOCK_SZ <= props.maxThreadsPerBlock);
   
-#if defined(USE_COOP_GROUPS)
   deviceSupportsCooperativeLaunch = (props.cooperativeLaunch == 1);
-  std::cerr << "Using cooperative groups if device supports it." << std::endl;
-#endif
 
-  //  Limit the grid, and thus, the barrier size.
-  int gcdOccupancy;
-  assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&gcdOccupancy, gcdKernelPtr, BLOCK_SZ, 0));
-  maxGridSize = min(BLOCK_SZ, props.multiProcessorCount * gcdOccupancy);    
-  if (0 < n && n < maxGridSize)
-    maxGridSize = n;
+  //  Limit the grid, and thus, the barrier size also.
+  maxGridSize = min(GCD_BLOCK_SZ, props.multiProcessorCount * getGcdKernelOccupancy());    
     
   barrier = new GmpCudaBarrier(maxGridSize);
   
     //  Copy moduli to device.
-  size_t maxModuli = maxGridSize * BLOCK_SZ;
+  size_t maxModuli = maxGridSize * GCD_BLOCK_SZ;
   assert(cudaSuccess == cudaMalloc(&moduliList, maxModuli * sizeof(uint32_t)));
   assert(cudaSuccess == cudaMemcpy(moduliList, moduli, maxModuli * sizeof(uint32_t), cudaMemcpyHostToDevice));
 }

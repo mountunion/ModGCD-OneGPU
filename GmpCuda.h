@@ -15,24 +15,23 @@
 #include <gmp.h>
 #include <stdint.h>
 #include <stdexcept>
-
-//  Uncomment the following line if you want to use cooperative groups
-//  to perform grid-wide synchronization provided by CUDA 9.
-//  Otherwise, a simple custom busy-wait barrier is used.
-//#define USE_COOP_GROUPS
-
-#ifdef USE_COOP_GROUPS
 #ifdef __CUDACC__
 #include <cooperative_groups.h>
-#endif
 #endif
 
 namespace GmpCuda
 {
+  constexpr int WARP_SZ = 32; // GmpCudaDevice checks to see whether this is true.
+  
   class GmpCudaBarrier
   {
 #ifdef __CUDACC__
   private:
+    //  Set USE_COOP_GROUPS_IF_AVAILABLE to true if you want to use cooperative groups
+    //  to perform grid-wide synchronization provided by CUDA 9.
+    //  Otherwise, a simple custom busy-wait barrier is used.
+    static constexpr bool USE_COOP_GROUPS_IF_AVAILABLE = false;
+  
     volatile char * barrier;
     unsigned int row;
     size_t pitch;
@@ -47,8 +46,7 @@ namespace GmpCuda
     __host__ __device__ GmpCudaBarrier& operator=     (const GmpCudaBarrier&  orig);
     __host__ __device__ GmpCudaBarrier& operator=     (      GmpCudaBarrier&& orig);
     __host__ __device__                 GmpCudaBarrier(      GmpCudaBarrier&& orig);
-    __host__ __device__                 GmpCudaBarrier(const GmpCudaBarrier&  orig);
-    
+    __host__ __device__                 GmpCudaBarrier(const GmpCudaBarrier&  orig);   
     __host__            void            reset();
 
     //  Inlining these device functions for execution speed.
@@ -74,22 +72,20 @@ namespace GmpCuda
     //  No __syncthreads() done here--caller generally should.
     __device__ inline void collect(uint64_t& out)
     {
-#if defined(USE_COOP_GROUPS) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600
-      cooperative_groups::this_grid().sync();   
-      if (threadIdx.x < gridDim.x)
-        {
-          volatile uint64_t * bar = barRow(row) + threadIdx.x;
-          out = *bar;
-        }
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600
+      if (USE_COOP_GROUPS_IF_AVAILABLE)
+        cooperative_groups::this_grid().sync();
+      constexpr bool SPIN_WAIT = !USE_COOP_GROUPS_IF_AVAILABLE;
 #else
+      constexpr bool SPIN_WAIT = true;
+#endif
       if (threadIdx.x < gridDim.x)
         {
           volatile uint64_t * bar = barRow(row) + threadIdx.x;
           do
             out = *bar;
-          while (!out);
+          while (SPIN_WAIT && !out);
         }
-#endif
     }
 #endif
   };
@@ -97,31 +93,25 @@ namespace GmpCuda
   class GmpCudaDevice
   {
   private:
-    typedef void (*GcdKernelPtr_t)(uint32_t*, size_t, size_t, uint32_t*, GmpCudaBarrier);
-    static GcdKernelPtr_t getGcdKernelPtr(void);
     GmpCudaBarrier* barrier;
     uint32_t* moduliList;
     int deviceNum;
     int maxGridSize;
-#if defined(USE_COOP_GROUPS)
     bool deviceSupportsCooperativeLaunch;
-#endif
   public:
-    // Adjust WARPS_PER_BLOCK to change the block size--don't change BLOCK_SZ directly.
-    // WARPS_PER_BLOCK must evenly divide WARP_SZ.
-    static constexpr int WARP_SZ         = 32;  // GmpCudaDevice checks to see whether this is true.
-    static constexpr int WARPS_PER_BLOCK = WARP_SZ / 4;               //  Provides most flexibility. 
-    static constexpr int BLOCK_SZ        = WARP_SZ * WARPS_PER_BLOCK; 
-    GmpCudaDevice(int);
+    static constexpr int GCD_BLOCK_SZ = WARP_SZ << 3; // Must be a power of 2 and a multiple of WARP_SZ.
+    static constexpr int MAX_THREADS  = GCD_BLOCK_SZ * GCD_BLOCK_SZ;
+    static int getGcdKernelOccupancy(void);
+    GmpCudaDevice(void);
     ~GmpCudaDevice();
     void gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error);
     int inline getMaxGridSize() const {return maxGridSize;}
   };
   
-  //  For L == 32, the largest possible NUM_MODULI is 68181070.
-  constexpr int NUM_MODULI = GmpCudaDevice::BLOCK_SZ * GmpCudaDevice::BLOCK_SZ; 
   constexpr int L          = 32;
   constexpr int W          = 64;
+  constexpr int NUM_MODULI = GmpCudaDevice::MAX_THREADS;
+  // For L == 32, the largest possible NUM_MODULI is 68181070.
   
-  extern const uint32_t moduli[];
+  extern const uint32_t moduli[];  
 }

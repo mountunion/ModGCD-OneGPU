@@ -31,7 +31,7 @@
 
   Invocation:
 
-    testmgcd* [ r ] [ i increment ] [ g grid_size ] num_bits [ gcd_size ]
+    testmgcd* [ r ] [ i increment ] num_bits [ gcd_size ]
 
   where
     *           is the size of the moduli in bits,
@@ -40,8 +40,6 @@
     Default is false.
     i increment is optional; it gives the increment to be added to num_bits.
 		If it is left off, only one size is tested.
-    g grid_size is optional; it can vary from 1 to the number of MPs on the device.
-		Default is the number of MPs on the device.
     num_bits    is the number of bits of the pseudorandomly generated test data, u and v.
     gcd_size    is optional; if not included in the invocation. Default is 1.
 
@@ -90,13 +88,12 @@ main(int argc, char *argv[])
   unsigned int num_bits;
   unsigned int num_g_bits = 1;
   unsigned int increment = 0;
-  unsigned int gridSize = 0;
   bool random = false;
   bool newFile = false;
 
   if (argc == 1)
     {
-      cout << "Usage: " << basename(argv[0]) << " [ r ] [ i increment ] [ g grid_size ] num_bits [ gcd_size ]" << endl;
+      cout << "Usage: " << basename(argv[0]) << " [ r ] [ i increment ] num_bits [ gcd_size ]" << endl;
       return 0;
     }
 
@@ -106,18 +103,14 @@ main(int argc, char *argv[])
       argc -= 1;
       argv += 1;
     }
+    
   if (argv[1][0] == 'i')
     {
       sscanf(argv[2], "%d", &increment);
       argc -= 2;
       argv += 2;
     }
-  if (argv[1][0] == 'g')
-    {
-      sscanf(argv[2], "%d", &gridSize);
-      argc -= 2;
-      argv += 2;
-    }
+    
   switch (argc)
     {
       default: exit(1);
@@ -139,7 +132,7 @@ main(int argc, char *argv[])
   }
   time_t ttime;
   ttime = -monotonicTime();
-  GmpCuda::GmpCudaDevice dev(gridSize);
+  GmpCuda::GmpCudaDevice dev;
   ttime += monotonicTime();
   cout << "Using device " << devNo
        << "; Cuda device count = " << cnt
