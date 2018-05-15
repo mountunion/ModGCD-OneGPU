@@ -22,10 +22,10 @@
 namespace GmpCuda
 {
   constexpr int WARP_SZ = 32; // GmpCudaDevice checks to see whether this is true.
-  
+
+#ifdef __CUDACC__  
   class GmpCudaBarrier
   {
-#ifdef __CUDACC__
   private:
     //  Set USE_COOP_GROUPS_IF_AVAILABLE to true if you want to use cooperative groups
     //  to perform grid-wide synchronization provided by CUDA 9.
@@ -87,21 +87,35 @@ namespace GmpCuda
           while (SPIN_WAIT && !out);
         }
     }
-#endif
   };
+#endif
 
   class GmpCudaDevice
   {
   private:
+#if defined(__CUDACC__)
+    typedef cudaError_t (*launcher_t)(const void*, dim3, dim3, void**, size_t, cudaStream_t);
+#else
+    typedef void GmpCudaBarrier;
+    typedef int (*launcher_t)(void);
+#endif
     GmpCudaBarrier* barrier;
     uint32_t* moduliList;
     int deviceNum;
     int maxGridSize;
-    bool deviceSupportsCooperativeLaunch;
+    static void* getGcdKernel(void);
+    launcher_t kernelLauncher;
   public:
     static constexpr int GCD_BLOCK_SZ = WARP_SZ << 3; // Must be a power of 2 and a multiple of WARP_SZ.
     static constexpr int MAX_THREADS  = GCD_BLOCK_SZ * GCD_BLOCK_SZ;
-    static int getGcdKernelOccupancy(void);
+    //  Error codes used by gcdKernel to tell gcd what's going on.
+    static constexpr uint32_t GCD_KERNEL_ERROR   = 0; //  Error in the gcd kernel.
+    static constexpr uint32_t GCD_REDUX_ERROR    = 0; //  Error in reduction phase.
+    static constexpr uint32_t GCD_RECOVERY_ERROR = 1; //  Error in recovery phase.
+#if defined(__CUDACC__)
+    //  pair_t is used to pass result back from gcdKernel to gcd.
+    typedef struct __align__(8) {uint32_t modulus; int32_t value;} pair_t;
+#endif
     GmpCudaDevice(void);
     ~GmpCudaDevice();
     void gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error);

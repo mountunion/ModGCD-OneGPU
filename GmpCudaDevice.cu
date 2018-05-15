@@ -107,10 +107,14 @@ GmpCudaDevice::GmpCudaDevice(void)
   
   assert(GCD_BLOCK_SZ <= props.maxThreadsPerBlock);
   
-  deviceSupportsCooperativeLaunch = (props.cooperativeLaunch == 1);
+  kernelLauncher = static_cast<cudaError_t (*)(const void*, dim3, dim3, void**, size_t, cudaStream_t)>(&cudaLaunchKernel);
+  if (props.cooperativeLaunch == 1)
+    kernelLauncher = static_cast<cudaError_t (*)(const void*, dim3, dim3, void**, size_t, cudaStream_t)>(&cudaLaunchCooperativeKernel);
 
   //  Limit the grid, and thus, the barrier size also.
-  maxGridSize = min(GCD_BLOCK_SZ, props.multiProcessorCount * getGcdKernelOccupancy());    
+  int gcdOccupancy;
+  assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&gcdOccupancy, getGcdKernel(), GCD_BLOCK_SZ, 0));
+  maxGridSize = min(GCD_BLOCK_SZ, props.multiProcessorCount * gcdOccupancy);    
     
   barrier = new GmpCudaBarrier(maxGridSize);
   
