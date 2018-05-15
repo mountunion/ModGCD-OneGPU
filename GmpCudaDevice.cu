@@ -106,6 +106,8 @@ GmpCudaDevice::GmpCudaDevice(void)
   assert(props.warpSize == WARP_SZ);  //  Assume a fixed warp size of 32 for the forseeable future.
   
   assert(GCD_BLOCK_SZ <= props.maxThreadsPerBlock);
+
+  //gcdKernel = getGcdKernel();
   
   kernelLauncher = static_cast<cudaError_t (*)(const void*, dim3, dim3, void**, size_t, cudaStream_t)>(&cudaLaunchKernel);
   if (props.cooperativeLaunch == 1)
@@ -113,7 +115,7 @@ GmpCudaDevice::GmpCudaDevice(void)
 
   //  Limit the grid, and thus, the barrier size also.
   int gcdOccupancy;
-  assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&gcdOccupancy, getGcdKernel(), GCD_BLOCK_SZ, 0));
+  assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&gcdOccupancy, gcdKernel, GCD_BLOCK_SZ, 0));
   maxGridSize = min(GCD_BLOCK_SZ, props.multiProcessorCount * gcdOccupancy);    
     
   barrier = new GmpCudaBarrier(maxGridSize);

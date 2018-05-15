@@ -33,10 +33,6 @@
 #include "GmpCuda.h"
 using namespace GmpCuda;
 
-namespace  //  used only within this compilation unit.
-{
-}
-
 // Round x up to the next larger multiple of b.
 // Precondition: T must be an integral type, and x >= 0.
 template <typename T>
@@ -61,7 +57,8 @@ void
 __host__
 GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
 {
-  static void* gcdKernel = getGcdKernel();
+//  void* gcdKernel = getGcdKernel();
+
   if(mpz_cmp(u, v) < 0)
     mpz_swap(u, v);
 

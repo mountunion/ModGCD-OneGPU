@@ -396,7 +396,7 @@ namespace  //  used only within this compilation unit.
   //  Device kernel for the GmpCudaDevice::gcd method.
   __global__
   void
-  gcdKernel(uint32_t* buf, size_t uSz, size_t vSz, uint32_t* moduliList, GmpCudaBarrier bar)
+  kernel(uint32_t* buf, size_t uSz, size_t vSz, uint32_t* moduliList, GmpCudaBarrier bar)
   {
     int totalModuliRemaining = blockDim.x * gridDim.x;
     int ubits = (uSz + 1) * 32;  // somewhat of an overestimate
@@ -495,8 +495,6 @@ namespace  //  used only within this compilation unit.
   }
 }
 
-//  Interface with GmpCudaDevice class.
-void* GmpCudaDevice::getGcdKernel(void)
-{
-  return reinterpret_cast<void *>(gcdKernel);
-}
+//  Now make the kernel's address available to the GmpCudaDevice class.
+const void* GmpCudaDevice::gcdKernel = reinterpret_cast<void *>(&kernel);
+

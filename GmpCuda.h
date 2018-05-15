@@ -103,7 +103,7 @@ namespace GmpCuda
     uint32_t* moduliList;
     int deviceNum;
     int maxGridSize;
-    static void* getGcdKernel(void);
+    static const void* gcdKernel;
     launcher_t kernelLauncher;
   public:
     static constexpr int GCD_BLOCK_SZ = WARP_SZ << 3; // Must be a power of 2 and a multiple of WARP_SZ.
