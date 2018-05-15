@@ -55,9 +55,6 @@
 #error Only linux supported
 #endif
 
-#if !defined(NO_GPU)
-#include <cuda_runtime.h>
-#endif
 #include <iostream>
 #include <iomanip>
 #include <libgen.h>
@@ -123,21 +120,12 @@ main(int argc, char *argv[])
 #if defined(NO_GPU)
   cout << "Executing tests only on CPU." << endl;
 #else
-  int cnt;
-  int devNo = 0;
-  cudaGetDeviceCount(&cnt);
-  if ( cudaSuccess != cudaSetDevice(devNo)) {
-    cout << "Error on cuda set device" << endl;
-    exit(2);
-  }
   time_t ttime;
   ttime = -monotonicTime();
   GmpCuda::GmpCudaDevice dev;
   ttime += monotonicTime();
-  cout << "Using device " << devNo
-       << "; Cuda device count = " << cnt
-       << "; max grid size = " << dev.getMaxGridSize() << endl;
-  cout << "Initialization time: " << ttime/1e6 << " ms." << endl;
+  cout << "Max grid size = " << dev.getMaxGridSize() << endl
+       << "Initialization time: " << ttime/1e6 << " ms." << endl;
 #endif
 
   mpz_t u, v, g, mod_g;

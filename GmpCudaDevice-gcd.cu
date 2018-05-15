@@ -57,8 +57,6 @@ void
 __host__
 GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
 {
-//  void* gcdKernel = getGcdKernel();
-
   if(mpz_cmp(u, v) < 0)
     mpz_swap(u, v);
 

@@ -20,17 +20,17 @@
 GMPL=-lgmp
 
 CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_52,code=sm_52 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_61,code=sm_61 -gencode=arch=compute_70,code=sm_70
-#CUDA_ARCH=-arch=sm_61 -gencode=arch=compute_61,code=sm_61
+
 CXX=g++
 CXXFLAGS=--std c++11 -O2 -m64
 
 NVCC=nvcc
-NVCCFLAGS= -g -O2 --std c++11 --use_fast_math -m64  --device-c $(CUDA_ARCH)
+NVCCFLAGS= $(CXXFLAGS) --device-c 
 
 LD=nvcc
 LDFLAGS=$(CUDA_ARCH)
 
-GCD_KERN_FLAGS=-maxrregcount 32
+GCD_KERN_FLAGS=--use_fast_math $(CUDA_ARCH) -maxrregcount 32
 
 .PHONY: all clean distclean
 
@@ -43,7 +43,7 @@ all: testmodgcd testmodgcd-nogpu
 static:
 	echo "Making portable executables "
 	$(MAKE) clean
-	$(MAKE) GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)" CXXFLAGS="-static-libstdc++ $(CXXFLAGS)"
+	$(MAKE) GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)"
 
 testmodgcd: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
@@ -55,28 +55,28 @@ testmodgcd-nogpu: testmodgcd.cpp GmpCuda.h
 	$(CXX) $(CXXFLAGS) -DNO_GPU $< -o $@ $(GMPL)
 
 testmodgcd.o: testmodgcd.cpp GmpCuda.h
-	$(NVCC) $(NVCCFLAGS) -c $<
+	$(CXX) $(CXXFLAGS) -c $<
 
 GmpCudaBarrier.o: GmpCudaBarrier.cu GmpCuda.h
-	$(NVCC) $(NVCCFLAGS) -c $< -o $@
+	$(NVCC) $(NVCCFLAGS) -c $<
 
 GmpCudaDevice.o: GmpCudaDevice.cu GmpCuda.h
-	$(NVCC) $(NVCCFLAGS) -c $< -o $@
+	$(NVCC) $(NVCCFLAGS) -c $<
 
 GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCuda.h
-	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
+	$(NVCC) $(NVCCFLAGS) -c $<
 
 GmpCudaDevice-gcdKernel.o: GmpCudaDevice-gcdKernel.cu GmpCuda.h
-	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
-
-GmpCudaModuli.cu: createModuli GmpCuda.h
-	./createModuli > $@
-
-GmpCudaModuli.o: GmpCudaModuli.cu GmpCuda.h
-	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $< -o $@
+	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $<
 
 createModuli: createModuli.cpp GmpCuda.h
 	$(CXX) $(CXXFLAGS) $< $(GMPL) -o $@
+
+GmpCudaModuli.cpp: createModuli GmpCuda.h
+	./createModuli > $@
+
+GmpCudaModuli.o: GmpCudaModuli.cpp GmpCuda.h
+	$(CXX) $(CXXFLAGS) -c $<
 
 clean:
 	rm *.o testmodgcd testmodgcd-nogpu || true

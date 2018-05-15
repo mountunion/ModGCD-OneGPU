@@ -94,7 +94,7 @@
 using namespace GmpCuda;
 
 //  Initialize the CUDA device.  The device to use can be set by cudaSetDevice.
-//  Also initializes the global barrier.
+//  Also initializes the global barrier and the moduli list.
 GmpCudaDevice::GmpCudaDevice(void)
 {
   assert(cudaSuccess == cudaGetDevice(&deviceNum));
@@ -107,11 +107,10 @@ GmpCudaDevice::GmpCudaDevice(void)
   
   assert(GCD_BLOCK_SZ <= props.maxThreadsPerBlock);
 
-  //gcdKernel = getGcdKernel();
-  
-  kernelLauncher = static_cast<cudaError_t (*)(const void*, dim3, dim3, void**, size_t, cudaStream_t)>(&cudaLaunchKernel);
-  if (props.cooperativeLaunch == 1)
-    kernelLauncher = static_cast<cudaError_t (*)(const void*, dim3, dim3, void**, size_t, cudaStream_t)>(&cudaLaunchCooperativeKernel);
+  //  The kernel launcher we want to use depends on whether the device supports cooperative launch.
+  kernelLauncher = (props.cooperativeLaunch == 1)
+    ? static_cast<cudaError_t (*)(const void*, dim3, dim3, void**, size_t, cudaStream_t)>(&cudaLaunchCooperativeKernel)
+    : static_cast<cudaError_t (*)(const void*, dim3, dim3, void**, size_t, cudaStream_t)>(&cudaLaunchKernel);
 
   //  Limit the grid, and thus, the barrier size also.
   int gcdOccupancy;
@@ -120,10 +119,10 @@ GmpCudaDevice::GmpCudaDevice(void)
     
   barrier = new GmpCudaBarrier(maxGridSize);
   
-    //  Copy moduli to device.
-  size_t maxModuli = maxGridSize * GCD_BLOCK_SZ;
-  assert(cudaSuccess == cudaMalloc(&moduliList, maxModuli * sizeof(uint32_t)));
-  assert(cudaSuccess == cudaMemcpy(moduliList, moduli, maxModuli * sizeof(uint32_t), cudaMemcpyHostToDevice));
+  //  Copy moduli to device.
+  size_t maxModuliBytes = maxGridSize * GCD_BLOCK_SZ * sizeof(uint32_t);
+  assert(cudaSuccess == cudaMalloc(&moduliList, maxModuliBytes));
+  assert(cudaSuccess == cudaMemcpy(moduliList, moduli, maxModuliBytes, cudaMemcpyHostToDevice));
 }
 
 GmpCudaDevice::~GmpCudaDevice()
