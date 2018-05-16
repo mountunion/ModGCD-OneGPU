@@ -31,17 +31,18 @@
 
   Invocation:
 
-    testmgcd* [ r ] [ i increment ] num_bits [ gcd_size ]
+    testmgcd [ r ] [ i increment ] [ f final_bits ] num_bits [ gcd_size ]
 
   where
-    *           is the size of the moduli in bits,
-    r           is optional; it causes the test to use random numbers. If left off the test will use test input in /tests. 
-    If input does not exist in /tests for num_bits then random numbers will be generated and stored for future tests.
-    Default is false.
-    i increment is optional; it gives the increment to be added to num_bits.
-		If it is left off, only one size is tested.
-    num_bits    is the number of bits of the pseudorandomly generated test data, u and v.
-    gcd_size    is optional; if not included in the invocation. Default is 1.
+    r            is optional; it causes the test to use random numbers. If left off the test will use test input in /tests. 
+                 If input does not exist in /tests for num_bits then random numbers will be generated and stored for future tests.
+                 Default is false.
+    i increment  is optional; it gives the increment to be added to num_bits.
+		             If it is left off, only one size is tested.
+    f final_bits is optional; it gives the limiting size of num_bits.
+		             If it is left off, the tests will continue until the program runs out of resources (most likely threads on the gpu).
+    num_bits     is the number of bits of the pseudorandomly generated test data, u and v.
+    gcd_size     is optional; if not included in the invocation. Default is 1.
 
   Description:
   u and v are pseudorandomly generated positive integers having num_bits bits, with a gcd of at least
@@ -62,6 +63,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include <string>
+#include <climits>
 #include <sys/stat.h>
 #include "GmpCuda.h"
 
@@ -86,12 +88,13 @@ main(int argc, char *argv[])
   unsigned int num_bits;
   unsigned int num_g_bits = 1;
   unsigned int increment = 0;
+  unsigned int final_bits = UINT_MAX;
   bool random = false;
   bool newFile = false;
 
   if (argc == 1)
     {
-      cout << "Usage: " << basename(argv[0]) << " [ r ] [ i increment ] num_bits [ gcd_size ]" << endl;
+      cout << "Usage: " << basename(argv[0]) << " [ r ] [ i increment ] [ f final ] num_bits [ gcd_size ]" << endl;
       return 0;
     }
 
@@ -109,6 +112,13 @@ main(int argc, char *argv[])
       argv += 2;
     }
     
+  if (argv[1][0] == 'f')
+    {
+      sscanf(argv[2], "%d", &final_bits);
+      argc -= 2;
+      argv += 2;
+    }
+    
   switch (argc)
     {
       default: exit(1);
@@ -116,6 +126,9 @@ main(int argc, char *argv[])
       case 2: sscanf(argv[1], "%u", &num_bits);
     }
 
+  if (increment == 0)
+    final_bits = num_bits, increment = 1;
+    
   cout << "GMP version " << gmp_version << "." << endl;
   
   try  // catch exceptions/errors thrown from dev.
@@ -140,7 +153,7 @@ main(int argc, char *argv[])
       gmp_randstate_t state;
       gmp_randinit_mt(state);
 
-      do
+      for ( ; num_bits <= final_bits; num_bits += increment)
         {
           cout << "***************************** "
                << "Input size = " << num_bits << " (" << num_bits/1024.0 << " Kibit); gcd bits = " << num_g_bits
@@ -190,6 +203,8 @@ main(int argc, char *argv[])
               pFile = fopen (testFile.c_str(),"r");
             }
           }
+          
+          bool warmup = true;
 
           for (int i = 0; i < NUM_REPS; i += 1)
             {
@@ -242,6 +257,11 @@ main(int argc, char *argv[])
               mtime += monotonicTime();
               
 #if !defined(NO_GPU)
+              if (warmup)
+                {
+                  dev.gcd(mod_g, u, v);
+                  warmup = false;
+                }
               atime -= monotonicTime();
               dev.gcd(mod_g, u, v);
               atime += monotonicTime();
@@ -278,10 +298,7 @@ main(int argc, char *argv[])
 #if !defined(NO_GPU)
           cout << "MOD/GMP ratio: " << (double)atime/(double)mtime << endl;
 #endif
-
-          num_bits += increment;
         }
-      while (increment > 0);
     }
   catch (std::runtime_error e)  //  Some error thrown on dev.
     {
