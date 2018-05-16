@@ -88,7 +88,7 @@ main(int argc, char *argv[])
   unsigned int num_bits;
   unsigned int num_g_bits = 1;
   unsigned int increment = 0;
-  unsigned int final_bits = UINT_MAX;
+  unsigned int final_bits = 0;  //  Stop after 1 test.
   bool random = false;
   bool newFile = false;
 
@@ -110,6 +110,7 @@ main(int argc, char *argv[])
       sscanf(argv[2], "%d", &increment);
       argc -= 2;
       argv += 2;
+      final_bits = UINT_MAX;  //  if no f value specified, continue...
     }
     
   if (argv[1][0] == 'f')
@@ -126,138 +127,145 @@ main(int argc, char *argv[])
       case 2: sscanf(argv[1], "%u", &num_bits);
     }
 
-  if (increment == 0)
-    final_bits = num_bits, increment = 1;
-    
   cout << "GMP version " << gmp_version << "." << endl;
   
-  try  // catch exceptions/errors thrown from dev.
-    {
 #if defined(NO_GPU)
-      cout << "Executing tests only on CPU." << endl;
+  cout << "Executing tests only on CPU." << endl;
 #else
-      time_t ttime;
-      ttime = -monotonicTime();
-      GmpCuda::GmpCudaDevice dev; // Default is device 0.
-      ttime += monotonicTime();
-      cout << "Max grid size = " << dev.getMaxGridSize() << endl
-           << "Initialization time: " << ttime/1e6 << " ms." << endl;
+  time_t ttime;
+  try
+    {
+      // Take the work of setting the device out of initialization timing.
+      GmpCuda::GmpCudaDevice::setDevice(0); 
+    }
+  catch (std::runtime_error e)  //  Some error thrown on dev.
+    {
+      cout << e.what() << endl;
+      return 0;
+    }
+  ttime = -monotonicTime();
+  GmpCuda::GmpCudaDevice dev;
+  ttime += monotonicTime();
+  cout << "Max grid size = " << dev.getMaxGridSize() << endl
+       << "Initialization time: " << ttime/1e6 << " ms." << endl;
 #endif
 
-      mpz_t u, v, g, mod_g;
-      mpz_init(g);
-      mpz_init(mod_g);
-      mpz_init(u);
-      mpz_init(v);
+  mpz_t u, v, g, mod_g;
+  mpz_init(g);
+  mpz_init(mod_g);
+  mpz_init(u);
+  mpz_init(v);
 
-      gmp_randstate_t state;
-      gmp_randinit_mt(state);
+  gmp_randstate_t state;
+  gmp_randinit_mt(state);
 
-      for ( ; num_bits <= final_bits; num_bits += increment)
+  do
+    {
+      cout << "***************************** "
+           << "Input size = " << num_bits << " (" << num_bits/1024.0 << " Kibit); gcd bits = " << num_g_bits
+           << " *****************************" << endl;
+      time_t atime = time_t{0};
+      time_t mtime = time_t{0};
+      int numErrs = 0;
+
+      FILE * pFile;
+
+      if(!random)
+      {
+        const std::string folder = "tests";
+        struct stat sb;
+
+        if (!(stat(folder.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)))
         {
-          cout << "***************************** "
-               << "Input size = " << num_bits << " (" << num_bits/1024.0 << " Kibit); gcd bits = " << num_g_bits
-               << " *****************************" << endl;
-          time_t atime = time_t{0};
-          time_t mtime = time_t{0};
-          int numErrs = 0;
-
-          FILE * pFile;
-
-          if(!random)
-          {
-            const std::string folder = "tests";
-            struct stat sb;
-
-            if (!(stat(folder.c_str(), &sb) == 0 && S_ISDIR(sb.st_mode)))
+            //create directory
+            cout << "Tests Folder Does not exist. Creating tests\n";
+            const int dir_err = mkdir("tests", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+            if (-1 == dir_err)
             {
-                //create directory
-                cout << "Tests Folder Does not exist. Creating tests\n";
-                const int dir_err = mkdir("tests", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
-                if (-1 == dir_err)
-                {
-                    printf("Error creating directory!\n");
-                    exit(3);
-                }
+                printf("Error creating directory!\n");
+                exit(3);
+            }
+        }
+
+        std::string testFile;
+        testFile = folder + "/" + std::to_string(num_bits) + "-" + std::to_string(num_g_bits);
+        
+        if (!(stat(testFile.c_str(), &sb) == 0 && S_ISREG(sb.st_mode)))
+        {
+            //create file
+            cout << "Tests File Does not exist. Creating tests/" << num_bits << "-" << num_g_bits << "\n";
+            
+            pFile = fopen (testFile.c_str(),"a+");
+            if (pFile==NULL)
+            {              
+              printf("Error creating file!\n");
+              exit(4);
             }
 
-            std::string testFile;
-            testFile = folder + "/" + std::to_string(num_bits) + "-" + std::to_string(num_g_bits);
-            
-            if (!(stat(testFile.c_str(), &sb) == 0 && S_ISREG(sb.st_mode)))
-            {
-                //create file
-                cout << "Tests File Does not exist. Creating tests/" << num_bits << "-" << num_g_bits << "\n";
-                
-                pFile = fopen (testFile.c_str(),"a+");
-                if (pFile==NULL)
-                {              
-                  printf("Error creating file!\n");
-                  exit(4);
-                }
+            newFile = true;
+        } 
+        else 
+        {
+          pFile = fopen (testFile.c_str(),"r");
+        }
+      }
+      
+      bool warmup = true;
 
-                newFile = true;
-            } 
-            else 
+      for (int i = 0; i < NUM_REPS; i += 1)
+        {
+          if(random)
+          {
+            do
+              mpz_urandomb(u, state, num_bits - num_g_bits);
+            while (mpz_cmp_ui(u, 0) == 0);
+            do
+              mpz_urandomb(v, state, num_bits - num_g_bits);
+            while (mpz_cmp_ui(v, 0) == 0);
+            do
+              mpz_urandomb(g, state, num_g_bits);
+            while (mpz_cmp_ui(g, 0) == 0);
+            mpz_mul(u, g, u);
+            mpz_mul(v, g, v);
+          }
+          else
+          {
+            if(newFile)
             {
-              pFile = fopen (testFile.c_str(),"r");
+              do
+                mpz_urandomb(u, state, num_bits - num_g_bits);
+              while (mpz_cmp_ui(u, 0) == 0);
+              do
+                mpz_urandomb(v, state, num_bits - num_g_bits);
+              while (mpz_cmp_ui(v, 0) == 0);
+              do
+                mpz_urandomb(g, state, num_g_bits);
+              while (mpz_cmp_ui(g, 0) == 0);
+              mpz_mul(u, g, u);
+              mpz_mul(v, g, v);
+
+              mpz_out_str (pFile, 62, u);
+              fprintf(pFile, "\n");
+              
+              mpz_out_str (pFile, 62, v);
+              fprintf(pFile, "\n");
+              
+              fflush(pFile);
+            }
+            else
+            {
+              mpz_inp_str (u, pFile, 62);
+              mpz_inp_str (v, pFile, 62);
             }
           }
+          mtime -= monotonicTime();
+          mpz_gcd(g, u, v);
+          mtime += monotonicTime();
           
-          bool warmup = true;
-
-          for (int i = 0; i < NUM_REPS; i += 1)
-            {
-              if(random)
-              {
-                do
-                  mpz_urandomb(u, state, num_bits - num_g_bits);
-                while (mpz_cmp_ui(u, 0) == 0);
-                do
-                  mpz_urandomb(v, state, num_bits - num_g_bits);
-                while (mpz_cmp_ui(v, 0) == 0);
-                do
-                  mpz_urandomb(g, state, num_g_bits);
-                while (mpz_cmp_ui(g, 0) == 0);
-                mpz_mul(u, g, u);
-                mpz_mul(v, g, v);
-              }
-              else
-              {
-                if(newFile)
-                {
-                  do
-                    mpz_urandomb(u, state, num_bits - num_g_bits);
-                  while (mpz_cmp_ui(u, 0) == 0);
-                  do
-                    mpz_urandomb(v, state, num_bits - num_g_bits);
-                  while (mpz_cmp_ui(v, 0) == 0);
-                  do
-                    mpz_urandomb(g, state, num_g_bits);
-                  while (mpz_cmp_ui(g, 0) == 0);
-                  mpz_mul(u, g, u);
-                  mpz_mul(v, g, v);
-
-                  mpz_out_str (pFile, 62, u);
-                  fprintf(pFile, "\n");
-                  
-                  mpz_out_str (pFile, 62, v);
-                  fprintf(pFile, "\n");
-                  
-                  fflush(pFile);
-                }
-                else
-                {
-                  mpz_inp_str (u, pFile, 62);
-                  mpz_inp_str (v, pFile, 62);
-                }
-              }
-              mtime -= monotonicTime();
-              mpz_gcd(g, u, v);
-              mtime += monotonicTime();
-              
 #if !defined(NO_GPU)
-              if (warmup)
+          try
+            {
+              if (warmup)  // Warm up GPU for timing.
                 {
                   dev.gcd(mod_g, u, v);
                   warmup = false;
@@ -265,46 +273,48 @@ main(int argc, char *argv[])
               atime -= monotonicTime();
               dev.gcd(mod_g, u, v);
               atime += monotonicTime();
-                  
-              if (mpz_cmp(g, mod_g)!= 0)
-                {
-                  char uS[mpz_sizeinbase(u, 16) + 1], vS[mpz_sizeinbase(v, 16) + 1];
-                  char gS[mpz_sizeinbase(g, 16) + 1], mod_gS[mpz_sizeinbase(mod_g, 16) + 1];
-                  mpz_get_str(uS, 16, u);
-                  mpz_get_str(vS, 16, v);
-                  mpz_get_str(gS, 16, g);
-                  mpz_get_str(mod_gS, 16, mod_g);
-                  cout << "Test " << i << " error\n";
-                  cout << "GMP_GCD = " << gS << endl;
-                  cout << "MOD_GCD = " << mod_gS << ", size = " << mpz_size(mod_g) << endl;
-                  numErrs += 1;
-                }
-#endif
             }
-
-          if(!random)
-          {
-            fclose (pFile);
-          }
-
-          cout << fixed << setprecision(3);
-#if !defined(NO_GPU)
-          if (numErrs == 0)
-            cout << "Modular gcd correct\n";
-          cout << "MOD time(avg): " << atime/NUM_REPS/1e6 << " ms\n";
-#endif
-
-          cout << "GMP time     : " << mtime/NUM_REPS/1e6 << " ms\n";
-#if !defined(NO_GPU)
-          cout << "MOD/GMP ratio: " << (double)atime/(double)mtime << endl;
+          catch (std::runtime_error e)
+            {
+              cout << e.what() << endl;
+              return 0;
+            }
+              
+          if (mpz_cmp(g, mod_g)!= 0)
+            {
+              char uS[mpz_sizeinbase(u, 16) + 1], vS[mpz_sizeinbase(v, 16) + 1];
+              char gS[mpz_sizeinbase(g, 16) + 1], mod_gS[mpz_sizeinbase(mod_g, 16) + 1];
+              mpz_get_str(uS, 16, u);
+              mpz_get_str(vS, 16, v);
+              mpz_get_str(gS, 16, g);
+              mpz_get_str(mod_gS, 16, mod_g);
+              cout << "Test " << i << " error\n";
+              cout << "GMP_GCD = " << gS << endl;
+              cout << "MOD_GCD = " << mod_gS << ", size = " << mpz_size(mod_g) << endl;
+              numErrs += 1;
+            }
 #endif
         }
+
+      if(!random)
+      {
+        fclose (pFile);
+      }
+
+      cout << fixed << setprecision(3);
+#if !defined(NO_GPU)
+      if (numErrs == 0)
+        cout << "Modular gcd correct\n";
+      cout << "MOD time(avg): " << atime/NUM_REPS/1e6 << " ms\n";
+#endif
+
+      cout << "GMP time     : " << mtime/NUM_REPS/1e6 << " ms\n";
+#if !defined(NO_GPU)
+      cout << "MOD/GMP ratio: " << (double)atime/(double)mtime << endl;
+#endif
+      num_bits += increment;
     }
-  catch (std::runtime_error e)  //  Some error thrown on dev.
-    {
-      cout << e.what() << endl;
-      return 0;
-    }
+  while (num_bits <= final_bits);
 
   cout << endl;
   return 0;

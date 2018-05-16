@@ -93,20 +93,20 @@
 #include "GmpCuda.h"
 using namespace GmpCuda;
 
-//  Initialize the CUDA device.  The device number to use is passed in as a parameter.
-//  Also initializes the global barrier and the moduli list.
-GmpCudaDevice::GmpCudaDevice(int devNo)
+void GmpCudaDevice::setDevice(int devNo)
 {
   int devCount;
   assert(cudaSuccess == cudaGetDeviceCount(&devCount));
-  
   if (devNo < 0 || devNo >= devCount)
     throw std::runtime_error("Invalid device number.");
-  
-  // Set the device to use.
-  // Setting the device can take around 1.5 seconds when there are multiple devices!
-  deviceNum = devNo;
-  assert(cudaSuccess == cudaSetDevice(deviceNum));
+  assert(cudaSuccess == cudaSetDevice(devNo)); 
+}
+
+//  Initialize the CUDA device.  The device number to use is passed in as a parameter.
+//  Also initializes the global barrier and the moduli list.
+GmpCudaDevice::GmpCudaDevice(void)
+{
+  assert(cudaSuccess == cudaGetDevice(&deviceNum));
 
   //  Initialize the device properties values.
   struct cudaDeviceProp props;
