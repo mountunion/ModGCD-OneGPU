@@ -15,7 +15,7 @@
 #include <gmp.h>
 #include <stdint.h>
 #include <stdexcept>
-#ifdef __CUDACC__
+#if defined(__CUDACC__) && defined(USE_COOP_GROUPS)
 #include <cooperative_groups.h>
 #endif
 
@@ -27,11 +27,6 @@ namespace GmpCuda
   class GmpCudaBarrier
   {
   private:
-    //  Set USE_COOP_GROUPS_IF_AVAILABLE to true if you want to use cooperative groups
-    //  to perform grid-wide synchronization provided by CUDA 9.
-    //  Otherwise, a simple custom busy-wait barrier is used.
-    static constexpr bool USE_COOP_GROUPS_IF_AVAILABLE = false;
-  
     volatile char * barrier;
     unsigned int row;
     size_t pitch;
@@ -72,10 +67,9 @@ namespace GmpCuda
     //  No __syncthreads() done here--caller generally should.
     __device__ inline void collect(uint64_t& out)
     {
-#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600
-      if (USE_COOP_GROUPS_IF_AVAILABLE)
-        cooperative_groups::this_grid().sync();
-      constexpr bool SPIN_WAIT = !USE_COOP_GROUPS_IF_AVAILABLE;
+#if defined(USE_COOP_GROUPS) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600
+      cooperative_groups::this_grid().sync();
+      constexpr bool SPIN_WAIT = false;
 #else
       constexpr bool SPIN_WAIT = true;
 #endif

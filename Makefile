@@ -34,7 +34,7 @@ GCD_KERN_FLAGS=--use_fast_math $(CUDA_ARCH) -maxrregcount 32
 
 .PHONY: all clean distclean
 
-all: testmodgcd testmodgcd-nogpu
+all: testmodgcd testmodgcd-coop-gps testmodgcd-nogpu
 
 ##
 ## Used to generate executables for the timing reported in paper(s).
@@ -46,6 +46,12 @@ static:
 	$(MAKE) GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)"
 
 testmodgcd: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
+	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
+
+##
+##  This target uses cooperative groups for inter-SM synchronization.
+##
+testmodgcd-coop-gps: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel-coop-gps.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
 
 ##
@@ -68,6 +74,9 @@ GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCuda.h
 
 GmpCudaDevice-gcdKernel.o: GmpCudaDevice-gcdKernel.cu GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $<
+
+GmpCudaDevice-gcdKernel-coop-gps.o: GmpCudaDevice-gcdKernel.cu GmpCuda.h
+	$(NVCC) $(NVCCFLAGS) -DUSE_COOP_GROUPS $(GCD_KERN_FLAGS) -c $< -o $@
 
 createModuli: createModuli.cpp GmpCuda.h
 	$(CXX) $(CXXFLAGS) $< $(GMPL) -o $@
