@@ -151,10 +151,9 @@ namespace  //  used only within this compilation unit.
 
     //  Now find the min of the values in sharedX.
     //  WARPS_PER_BLOCK must be a power of 2 <= WARP_SZ.
-    if (threadIdx.x < WARPS_PER_BLOCK)
-      x = sharedX[threadIdx.x];
     if (threadIdx.x < WARP_SZ)
       {
+        x = sharedX[threadIdx.x];
 #pragma unroll
         for (int i = WARPS_PER_BLOCK/2; i > 0; i /= 2)
           x = min(x, __shfl_down_sync(FULL_MASK, x, i));        
