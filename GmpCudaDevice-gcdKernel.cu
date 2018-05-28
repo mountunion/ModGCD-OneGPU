@@ -45,6 +45,17 @@ namespace  //  used only within this compilation unit.
   //  This type is used to conveniently manipulate the modulus and its inverse.
   typedef struct {uint32_t modulus; uint64_t inverse;} modulus_t;
   
+  //  Which thread in the warp satisfying the predicate has a nonzero value?
+  //  Uses ballot so that every multiprocessor (deterministically) chooses the same pair.
+  //  In case there is no winner, use the 0 from warpLane 0.
+  __device__
+  inline
+  int
+  findAnyNonZero(pair_t pair, bool predicate = true)
+  {
+    return max(0, __ffs(__ballot_sync(FULL_MASK, predicate && pair.value != 0)) - 1);
+  }
+  
   //  Posts to the barrier one of the pair parameters whose value is not 0.
   //  If no such value is found, a pair with a 0 value is posted.
   //  Preconditions:  all threads in block participate.
@@ -56,19 +67,17 @@ namespace  //  used only within this compilation unit.
      
     __syncthreads();  // protect shared memory against last call to this function.
 
-    int winner = max(0, __ffs(__ballot_sync(FULL_MASK, pair.value != 0)) - 1);
-    //  in case there is no winner, use the 0 from warpLane 0.
-    if (winner == threadIdx.x % warpSize)
-      sharedPair[threadIdx.x / warpSize] = pair;
+    if (findAnyNonZero(pair) == threadIdx.x % WARP_SZ)
+      sharedPair[threadIdx.x / WARP_SZ] = pair;
 
     __syncthreads();
-
-    winner = max(0, __ffs(__ballot_sync(FULL_MASK, threadIdx.x < WARPS_PER_BLOCK && sharedPair[threadIdx.x].value != 0)) - 1);
-      
-    bar.post(*reinterpret_cast<uint64_t *>(sharedPair + winner));
+    
+    pair = sharedPair[findAnyNonZero(sharedPair[threadIdx.x], threadIdx.x < WARPS_PER_BLOCK)];
+    
+    bar.post(*reinterpret_cast<uint64_t *>(&pair));
   }
 
-  //  Chooses one of the pairs in the barrier that isn't 0;
+  //  Chooses one of the pairs in the barrier that doesn't have a 0 value;
   //  chosen pair is returned in pair as result.
   //  If there are no nonzero values, a pair with value 0 is returned.
   //  Preconditions:  all threads in block participate.
@@ -83,27 +92,18 @@ namespace  //  used only within this compilation unit.
     
     __syncthreads();  // protect shared memory against last call to this function.
     
-    int winner;
-    int warpLane = threadIdx.x % warpSize;
-    int warpIdx = threadIdx.x / warpSize;
-    int numWarps = (gridDim.x - 1) / warpSize + 1;
+    int warpLane = threadIdx.x % WARP_SZ;
     
-    winner = max(0, __ffs(__ballot_sync(FULL_MASK, threadIdx.x < gridDim.x && pair.value != 0)) - 1);
-    if (threadIdx.x < gridDim.x)
-      {
-        //  Using ballot so that every multiprocessor (deterministically) chooses the same pair(s).
-        //  in case there is no winner, use the 0 from warpLane 0.
-        if (winner == warpLane)
-          sharedPair[warpIdx] = pair;
-      }
+//    if (threadIdx.x < gridDim.x && findAnyNonZero(pair, threadIdx.x < gridDim.x) == warpLane)
+    if (findAnyNonZero(pair, threadIdx.x < gridDim.x) == warpLane)
+      sharedPair[threadIdx.x / WARP_SZ] = pair;
 
     __syncthreads();
 
-    //  All warps do this and get common value for winner.
-    //  Would it be faster to have 1 warp do this and put in shared memory for all?
-    winner = max(0, __ffs(__ballot_sync(FULL_MASK, warpLane < numWarps && sharedPair[warpLane].value != 0)) - 1);
+    int numWarps = (gridDim.x - 1) / WARP_SZ + 1;
 
-    pair = sharedPair[winner];
+    //  All warps do this and get common value for winner.
+    pair = sharedPair[findAnyNonZero(sharedPair[warpLane], warpLane < numWarps)];
   }
 
   //  Calculate min of x into lane 0 of warp.
