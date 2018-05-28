@@ -63,8 +63,7 @@ namespace  //  used only within this compilation unit.
 
     __syncthreads();
 
-    int numWarps = (blockDim.x - 1) / warpSize + 1;
-    winner = max(0, __ffs(__ballot_sync(FULL_MASK, threadIdx.x < numWarps && sharedPair[threadIdx.x].value != 0)) - 1);
+    winner = max(0, __ffs(__ballot_sync(FULL_MASK, threadIdx.x < WARPS_PER_BLOCK && sharedPair[threadIdx.x].value != 0)) - 1);
       
     bar.post(*reinterpret_cast<uint64_t *>(sharedPair + winner));
   }
