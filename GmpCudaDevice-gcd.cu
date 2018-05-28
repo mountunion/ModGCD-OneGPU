@@ -44,13 +44,14 @@ roundUp(T x, int b)
 }
   
 //  Calculate the number of moduli needed to compute the GCD.
-//  Number of moduli needed is approximated by a function of the number of bits in the larger input.
+//  Number of moduli needed is approximated by a function of the number of bits in the larger input,
+//  then rounded up to the next multiple of GCD_BLOCK_SZ.
 inline
 int
 numModuliNeededFor(size_t numBits)
 {
   constexpr float C_L = 1.6 - 0.015 * L; 
-  return static_cast<int>(ceil(C_L * numBits / logf(numBits)));
+  return roundUp(static_cast<int>(ceil(C_L * numBits / logf(numBits))), GmpCudaDevice::GCD_BLOCK_SZ);
 }
 
 void
@@ -72,16 +73,14 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
   mpz_export(buf + uSz, &vSz, -1, sizeof(uint32_t), 0, 0, v);
   memset(buf + uSz + vSz, 0, sizeof(buf) - (uSz + vSz) * sizeof(uint32_t));
   
-  int numModuliNeeded = roundUp(numModuliNeededFor(ubits), GCD_BLOCK_SZ);
-  
+  int numModuliNeeded = numModuliNeededFor(ubits);
   if (numModuliNeeded > NUM_MODULI)
     throw std::runtime_error("Not enough moduli available for given input.");
     
-  if (numModuliNeeded > maxGridSize * GCD_BLOCK_SZ)
+  int gridSize = numModuliNeeded/GCD_BLOCK_SZ;    
+  if (gridSize > maxGridSize)
     throw std::runtime_error("Cannot allocate enough threads to support computation.");
 
-  int gridSize = numModuliNeeded/GCD_BLOCK_SZ;
-     
   //  Allocate some extra space in the global buffer, so that modMP can assume it can safely read a multiple of
   //  warpSize words to get the entirety (+ more) of either parameter.
   uint32_t* globalBuf;
