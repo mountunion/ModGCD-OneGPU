@@ -33,7 +33,7 @@
 #include "GmpCuda.h"
 using namespace GmpCuda;
 
-// Round x up to the next larger multiple of b.
+// Round x up to the next larger multiple of b >= 2.
 // Precondition: T must be an integral type, and x >= 0.
 template <typename T>
 inline
@@ -74,16 +74,14 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error)
   
   int numModuliNeeded = roundUp(numModuliNeededFor(ubits), GCD_BLOCK_SZ);
   
-  int gridSize = min(numModuliNeeded/GCD_BLOCK_SZ + ((numModuliNeeded%GCD_BLOCK_SZ) ? 1 : 0), maxGridSize);
-     
-  int numThreads = GCD_BLOCK_SZ * gridSize;
-
-  if (numThreads < numModuliNeeded)
-    throw std::runtime_error("Cannot allocate enough threads to support computation.");
-
-  if (numThreads > NUM_MODULI)
+  if (numModuliNeeded > NUM_MODULI)
     throw std::runtime_error("Not enough moduli available for given input.");
     
+  if (numModuliNeeded > maxGridSize * GCD_BLOCK_SZ)
+    throw std::runtime_error("Cannot allocate enough threads to support computation.");
+
+  int gridSize = numModuliNeeded/GCD_BLOCK_SZ;
+     
   //  Allocate some extra space in the global buffer, so that modMP can assume it can safely read a multiple of
   //  warpSize words to get the entirety (+ more) of either parameter.
   uint32_t* globalBuf;
