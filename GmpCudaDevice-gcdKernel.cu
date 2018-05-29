@@ -300,8 +300,9 @@ namespace  //  used only within this compilation unit.
   uint32_t
   quoRemSmall(uint32_t& x, uint32_t y)
   {
-    uint32_t q = x / y;
-    x %= y;
+    uint32_t xf = x, yf = y;
+    uint32_t q = truncf(__fdividef(xf, yf));
+   // uint32_t yq = y * q;
     return q;
   }
 
