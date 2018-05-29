@@ -292,8 +292,21 @@ namespace  //  used only within this compilation unit.
     return q;
   }
 
+
+  //  Faster divide possible when x and y are close in size?
+  //  We have here 2^32 > x > y >= 2^24, so x / y < 2^8
+  __device__
+  inline
+  uint32_t
+  quoRemSmall(uint32_t& x, uint32_t y)
+  {
+    uint32_t q = x / y;
+    x %= y;
+    return q;
+  }
+
   //  Return 1/v (mod u), assuming gcd(u,v) == 1.
-  //  Will execute faster if u > v.
+  //  Assumes u > v.
   //  Uses the extended Euclidean algorithm:
   //  see Knuth, The Art of Computer Programming, vol. 2, 3/e,
   //  Algorithm X on pp342-3.
@@ -306,24 +319,32 @@ namespace  //  used only within this compilation unit.
     uint32_t u2u = 0, u3u = u;
     uint32_t v2u = 1, v3u = v;
     
-    while  (v3u != 1 && u3u >= FLOAT_THRESHOLD)
+    while  (v3u >= FLOAT_THRESHOLD)
       {
-        u2u += v2u * quoRem(u3u, v3u);
-        if (u3u == 1 || v3u <  FLOAT_THRESHOLD)
+        u2u += v2u * quoRemSmall(u3u, v3u);
+        if (u3u <  FLOAT_THRESHOLD)
           break;
-        v2u += u2u * quoRem(v3u, u3u);
+        v2u += u2u * quoRemSmall(v3u, u3u);
       }
-    
+      
     if (u3u == 1)
       return u - u2u;
+    if (v3u == 1)
+      return v2u;
+  
+    //  Only the smaller is < FLOAT_THRESHOLD--will need one more reduction.
+    if (v3u > u3u)
+      v2u += u2u * quoRem(v3u, u3u);
+    else
+      u2u += v2u * quoRem(u3u, v3u);
+      
+    if (u3u == 1)
+      return u - u2u;  
       
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
-    
     float u3f = u3u, v3f = v3u;
-    
     if (v3f > u3f)
       v2u += u2u * quoRem(v3f, u3f);
-    
     while  (v3f != 1.0)
       {
         u2u += v2u * quoRem(u3f, v3f);
