@@ -94,8 +94,7 @@ namespace  //  used only within this compilation unit.
     
     int warpLane = threadIdx.x % WARP_SZ;
     
-//    if (threadIdx.x < gridDim.x && findAnyNonZero(pair, threadIdx.x < gridDim.x) == warpLane)
-    if (findAnyNonZero(pair, threadIdx.x < gridDim.x) == warpLane)
+    if (findAnyNonZero(pair, threadIdx.x < gridDim.x) == warpLane && threadIdx.x < gridDim.x)
       sharedPair[threadIdx.x / WARP_SZ] = pair;
 
     __syncthreads();
