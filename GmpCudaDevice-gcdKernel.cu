@@ -300,8 +300,8 @@ namespace  //  used only within this compilation unit.
   uint32_t
   quoRemSmall(uint32_t& x, uint32_t y)
   {
-    uint32_t q = truncf(__fdividef(x, y));
-    if (q > 0)
+    uint32_t q = truncf(__fdividef(__uint2float_ru(x), __uint2float_rz(y)));
+//    if (q > 0)
       q -= 1;
     uint32_t yq = y * q;
 //    if (x < yq)
@@ -341,14 +341,15 @@ namespace  //  used only within this compilation unit.
     if (v3u == 1)
       return v2u;
   
-    //  Only the smaller is < FLOAT_THRESHOLD--will need one more reduction.
-    //  Uses integer division.
+    //  One is smaller than FLOAT_THRESHOLD and the other greater--will need one more reduction.
     uint32_t y2u, x3u, y3u;
     if (v3u > u3u)
       y2u = u2u, x3u = v3u, y3u = u3u; //  v2u += u2u * quoRem(v3u, u3u);
     else
       y2u = v2u, x3u = u3u, y3u = v3u; //  u2u += v2u * quoRem(u3u, v3u);
       
+      
+    //  Uses integer arithmetic.
     uint32_t tmp = y2u * quoRem(x3u, y3u);  //  Avoid thread divergence here!
 
     if (v3u > u3u)
@@ -360,9 +361,14 @@ namespace  //  used only within this compilation unit.
       return u - u2u;  
       
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
+    bool swapped = (v3u > u3u);
     float u3f = u3u, v3f = v3u;
-    if (v3f > u3f)
-      v2u += u2u * quoRem(v3f, u3f);
+    if (swapped)
+      {
+        uint32_t tmp = u2u; u2u = v2u; v2u = tmp;
+        float tmpf = u3f; u3f = v3f; v3f = tmpf;
+      }
+     // v2u += u2u * quoRem(v3f, u3f);
     while  (v3f != 1.0)
       {
         u2u += v2u * quoRem(u3f, v3f);
@@ -370,8 +376,11 @@ namespace  //  used only within this compilation unit.
           break;
         v2u += u2u * quoRem(v3f, u3f);
       }
-     
-    return (v3f == 1.0) ? v2u : u - u2u;
+   
+    if (swapped)
+      return (u3f == 1.0) ? u2u : u - v2u;
+    else
+      return (v3f == 1.0) ? v2u : u - u2u;
   }
 
   // Calculate u/v mod m, in the range [0,m-1]
