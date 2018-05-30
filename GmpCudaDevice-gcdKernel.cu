@@ -294,15 +294,23 @@ namespace  //  used only within this compilation unit.
 
 
   //  Faster divide possible when x and y are close in size?
-  //  We have here 2^32 > x > y >= 2^24, so x / y < 2^8
+  //  Precondition: 2^32 > x > y >= 2^24, so x / y < 2^8
   __device__
   inline
   uint32_t
   quoRemSmall(uint32_t& x, uint32_t y)
   {
-    uint32_t xf = x, yf = y;
-    uint32_t q = truncf(__fdividef(xf, yf));
-   // uint32_t yq = y * q;
+    uint32_t q = truncf(__fdividef(x, y));
+    if (q > 0)
+      q -= 1;
+    uint32_t yq = y * q;
+//    if (x < yq)
+//      yq -= y, q -= 1;
+    x -= yq;
+    if (x >= y)
+      x -= y, q += 1;
+    if (x >= y)
+      x -= y, q += 1;
     return q;
   }
 
@@ -334,10 +342,19 @@ namespace  //  used only within this compilation unit.
       return v2u;
   
     //  Only the smaller is < FLOAT_THRESHOLD--will need one more reduction.
+    //  Uses integer division.
+    uint32_t y2u, x3u, y3u;
     if (v3u > u3u)
-      v2u += u2u * quoRem(v3u, u3u);
+      y2u = u2u, x3u = v3u, y3u = u3u; //  v2u += u2u * quoRem(v3u, u3u);
     else
-      u2u += v2u * quoRem(u3u, v3u);
+      y2u = v2u, x3u = u3u, y3u = v3u; //  u2u += v2u * quoRem(u3u, v3u);
+      
+    uint32_t tmp = y2u * quoRem(x3u, y3u);  //  Avoid thread divergence here!
+
+    if (v3u > u3u)
+      v2u += tmp, v3u = x3u; //  v2u += u2u * quoRem(v3u, u3u);
+    else
+      u2u += tmp, u3u = x3u; //  u2u += v2u * quoRem(u3u, v3u);
       
     if (u3u == 1)
       return u - u2u;  
