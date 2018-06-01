@@ -299,6 +299,18 @@ namespace  //  used only within this compilation unit.
       x -= y, q += 1;
     return q;
   }
+  
+  template
+  <class T>
+  __device__
+  inline
+  void
+  swap(T& x, T& y)
+  {
+    T tmp = x;
+    x = y;
+    y = tmp;
+  }
 
   //  Return 1/v (mod u), assuming gcd(u,v) == 1.
   //  Assumes u > v.
@@ -314,6 +326,7 @@ namespace  //  used only within this compilation unit.
     uint32_t u2u = 0, u3u = u;
     uint32_t v2u = 1, v3u = v;
     
+    //  When u3 and v3 are both large enough, divide with floating point hardware.
     while  (v3u >= FLOAT_THRESHOLD)
       {
         u2u += v2u * quoRemSmallQuo(u3u, v3u);
@@ -322,51 +335,32 @@ namespace  //  used only within this compilation unit.
         v2u += u2u * quoRemSmallQuo(v3u, u3u);
       }
       
-    if (u3u == 1)
-      return u - u2u;
-    if (v3u == 1)
-      return v2u;
-  
-    //  One is smaller than FLOAT_THRESHOLD and the other greater--will need one more reduction.
-    uint32_t y2u, x3u, y3u;
-    if (v3u > u3u)
-      y2u = u2u, x3u = v3u, y3u = u3u; //  v2u += u2u * quoRem(v3u, u3u);
-    else
-      y2u = v2u, x3u = u3u, y3u = v3u; //  u2u += v2u * quoRem(u3u, v3u);
-      
-    //  Reduce with integer hardware.
-    uint32_t tmp = y2u * (x3u / y3u);  //  Avoid thread divergence here!
-    x3u %= y3u;
+    bool swapped = (v3u > u3u);
+    if (swapped)
+      {
+        swap(u2u, v2u);
+        swap(u3u, v3u);
+      }
 
-    if (v3u > u3u)
-      v2u += tmp, v3u = x3u; //  v2u += u2u * quoRem(v3u, u3u);
-    else
-      u2u += tmp, u3u = x3u; //  u2u += v2u * quoRem(u3u, v3u);
-      
-    if (u3u == 1)
-      return u - u2u;  
+    if (v3u == 1)
+      return (swapped) ? u - v2u : v2u;
+       
+    //  u3u is greater than FLOAT_THRESHOLD and v3u is smaller--will need one integer reduction.
+    u2u += v2u * (u3u / v3u);
+    u3u %= v3u;
       
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
-    bool swapped = (v3u > u3u);
     float u3f = u3u, v3f = v3u;
-    if (swapped)
+    while  (u3f > 1.0)
       {
-        uint32_t tmp = u2u; u2u = v2u; v2u = tmp;
-        float tmpf = u3f; u3f = v3f; v3f = tmpf;
-      }
-     // v2u += u2u * quoRem(v3f, u3f);
-    while  (v3f != 1.0)
-      {
-        u2u += v2u * quoRem(u3f, v3f);
-        if (u3f == 1.0)
-          break;
         v2u += u2u * quoRem(v3f, u3f);
+        u2u += v2u * quoRem(u3f, v3f);
       }
    
-    if (swapped)
-      return (u3f == 1.0) ? u2u : u - v2u;
-    else
-      return (v3f == 1.0) ? v2u : u - u2u;
+    if (u3f == 1.0)
+      return (swapped) ? u2u : u - u2u;
+    else // u3f == 0.0 && v3f == 1.0 
+      return (swapped) ? u - v2u : v2u;
   }
 
   // Calculate u/v mod m, in the range [0,m-1]
