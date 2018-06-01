@@ -298,7 +298,7 @@ namespace  //  used only within this compilation unit.
   __device__
   inline
   uint32_t
-  quoRemSmall(uint32_t& x, uint32_t y)
+  quoRemSmallQuo(uint32_t& x, uint32_t y)
   {
     uint32_t q = truncf(__fdividef(__uint2float_ru(x), __uint2float_rz(y)));
 //    if (q > 0)
@@ -330,10 +330,10 @@ namespace  //  used only within this compilation unit.
     
     while  (v3u >= FLOAT_THRESHOLD)
       {
-        u2u += v2u * quoRemSmall(u3u, v3u);
+        u2u += v2u * quoRemSmallQuo(u3u, v3u);
         if (u3u <  FLOAT_THRESHOLD)
           break;
-        v2u += u2u * quoRemSmall(v3u, u3u);
+        v2u += u2u * quoRemSmallQuo(v3u, u3u);
       }
       
     if (u3u == 1)
@@ -348,9 +348,9 @@ namespace  //  used only within this compilation unit.
     else
       y2u = v2u, x3u = u3u, y3u = v3u; //  u2u += v2u * quoRem(u3u, v3u);
       
-      
-    //  Uses integer arithmetic.
-    uint32_t tmp = y2u * quoRem(x3u, y3u);  //  Avoid thread divergence here!
+    //  Reduce with integer hardware.
+    uint32_t tmp = y2u * (x3u / y3u);  //  Avoid thread divergence here!
+    x3u %= y3u;
 
     if (v3u > u3u)
       v2u += tmp, v3u = x3u; //  v2u += u2u * quoRem(v3u, u3u);
