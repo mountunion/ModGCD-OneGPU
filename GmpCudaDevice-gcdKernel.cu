@@ -282,31 +282,17 @@ namespace  //  used only within this compilation unit.
     return static_cast<uint32_t>(q);
   }
 
-  __device__
-  inline
-  uint32_t
-  quoRem(uint32_t& x, uint32_t y)
-  {
-    uint32_t q = x / y;
-    x %= y;
-    return q;
-  }
-
-
   //  Faster divide possible when x and y are close in size?
   //  Precondition: 2^32 > x > y >= 2^24, so x / y < 2^8
   __device__
   inline
   uint32_t
   quoRemSmallQuo(uint32_t& x, uint32_t y)
-  {
+  { 
+    //  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
     uint32_t q = truncf(__fdividef(__uint2float_ru(x), __uint2float_rz(y)));
-//    if (q > 0)
-      q -= 1;
-    uint32_t yq = y * q;
-//    if (x < yq)
-//      yq -= y, q -= 1;
-    x -= yq;
+    q -= 1;  //  Adjust quotient so that it is always an underestimate.
+    x -= y * q;
     if (x >= y)
       x -= y, q += 1;
     if (x >= y)
