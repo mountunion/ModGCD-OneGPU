@@ -279,22 +279,23 @@ namespace  //  used only within this compilation unit.
       x += y, q -= 1.0;
     if (x >= y)
       x -= y, q += 1.0;
-    return static_cast<uint32_t>(q);
+    return __float2uint_rz(q);
   }
 
   //  Faster divide possible when x and y are close in size?
-  //  Precondition: 2^32 > x > y >= 2^24, so x / y < 2^8
+  //  Precondition: 2^32 > x > y >= 2^24, so 1 <= x / y < 2^8
   __device__
   inline
   uint32_t
   quoRemSmallQuo(uint32_t& x, uint32_t y)
   { 
     //  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
+    //  Round x up and y down, so q >= 1.
     uint32_t q = truncf(__fdividef(__uint2float_ru(x), __uint2float_rz(y)));
-    q -= 1;  //  Adjust quotient so that it is always an underestimate.
+    q -= 1;  //  Adjust quotient so that it is never an overestimate; otherwise y * q might overflow uint32_t.
     x -= y * q;
-    if (x >= y)
-      x -= y, q += 1;
+//    if (x >= y)
+//      x -= y, q += 1;
     if (x >= y)
       x -= y, q += 1;
     return q;
@@ -349,6 +350,9 @@ namespace  //  used only within this compilation unit.
       
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
     //  At this point v3f > u3f.
+    //  The loop will stop when u3f <= 1.0.
+    //  If u3f == 1.0, result is in u2u.
+    //  If u3f == 0.0, then v3f == 1.0 and result is in v2u.
     float u3f = __uint2float_rz(u3u);
     float v3f = __uint2float_rz(v3u);
     while (u3f > 1.0)
