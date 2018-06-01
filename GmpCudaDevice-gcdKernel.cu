@@ -321,7 +321,7 @@ namespace  //  used only within this compilation unit.
   uint32_t
   modInv(uint32_t u, uint32_t v)
   {
-    const uint32_t FLOAT_THRESHOLD = 1 << 24;
+    constexpr uint32_t FLOAT_THRESHOLD = 1 << 24;
   
     uint32_t u2u = 0, u3u = u;
     uint32_t v2u = 1, v3u = v;
@@ -335,32 +335,30 @@ namespace  //  used only within this compilation unit.
         v2u += u2u * quoRemSmallQuo(v3u, u3u);
       }
       
-    bool swapped = (v3u > u3u);
-    if (swapped)
+    bool swapped;
+    if (swapped = (v3u > u3u))
       {
         swap(u2u, v2u);
         swap(u3u, v3u);
       }
 
-    if (v3u == 1)
-      return (swapped) ? u - v2u : v2u;
-       
-    //  u3u is greater than FLOAT_THRESHOLD and v3u is smaller--will need one integer reduction.
+    //  u3u >= FLOAT_THRESHOLD && FLOAT_THRESHOLD > v3u.
+    //  Will need one integer reduction.
     u2u += v2u * (u3u / v3u);
     u3u %= v3u;
       
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
-    float u3f = u3u, v3f = v3u;
-    while  (u3f > 1.0)
+    //  At this point v3f > u3f.
+    float u3f = __uint2float_rz(u3u);
+    float v3f = __uint2float_rz(v3u);
+    while (u3f > 1.0)
       {
         v2u += u2u * quoRem(v3f, u3f);
         u2u += v2u * quoRem(u3f, v3f);
       }
-   
-    if (u3f == 1.0)
-      return (swapped) ? u2u : u - u2u;
-    else // u3f == 0.0 && v3f == 1.0 
-      return (swapped) ? u - v2u : v2u;
+      
+    return  (u3f == 1.0)  ? (swapped) ?     u2u : u - u2u 
+           /*v3f == 1.0*/ : (swapped) ? u - v2u :     v2u;
   }
 
   // Calculate u/v mod m, in the range [0,m-1]
