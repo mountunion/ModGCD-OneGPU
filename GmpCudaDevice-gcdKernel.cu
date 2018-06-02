@@ -262,28 +262,24 @@ namespace  //  used only within this compilation unit.
   }
   
   //  This version of quoRem requires that x and y be truncated integers
-  //  and that (1 << 24) > x, y >= 2.
+  //  and that (1 << 22) > x, y >= 1.
   //  Note that __fdividef(x, y) is accurate to 2 ulp;
-  //  when x and y are in this range, 1 < floor(x/y) < 2^23 means
-  //  2 ulp <= 1.0, so__fdividef should give a result within +/-1
-  //  of the true quotient.
-  //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
+  //  when x and y are in this range, 0 <= floor(x/y) < 2^22 means
+  //  2 ulp <= 0.5, so trunc(__fdividef(-,-)) should give either the true quotient or
+  //  one less.
+  //  We allow a quotient that's too small by 1, since modInv can tolerate that.
   __device__
   inline
   uint32_t
   quasiQuoRem(float& x, float y)
   {
-    // Estimate of q could be too high or too low by 1;
-    // Make it too low by 1 or two.
-    float q = truncf(__fdividef(x, y)) - 1.0;
-    x -= q*y;
-    if (x >= y)
-      x -= y, q += 1.0;
-    return __float2uint_rz(q);
+    float q = truncf(__fdividef(x, y));
+    x -= q*y; 
+    return __float2uint_rz(q);  //  Could be too small by 1.
   }
 
   //  Faster divide possible when x and y are close in size?
-  //  Precondition: 2^32 > x, y >= 2^24, so 1 <= x / y < 2^8
+  //  Precondition: 2^32 > x, y >= 2^22, so 1 <= x / y < 2^10
   //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
   __device__
   inline
@@ -291,15 +287,16 @@ namespace  //  used only within this compilation unit.
   quasiQuoRemSmallQuo(uint32_t& x, uint32_t y)
   { 
     //  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
-    // Estimate of q could be too high or too low by 1;
-    // Make it too low by 1 or two.
-    // Round x up and y down, so q >= 1, then subtract 1.
-    uint32_t q = __float2uint_rz(__fdividef(__uint2float_ru(x), __uint2float_rz(y))) - 1;
-  //  q -= 1;  //  Adjust quotient so that it is never an overestimate; otherwise y * q might overflow uint32_t.
-    x -= q * y;
+    // The __fdividef estimate of q could be too high or too low by 1;
+    // make it too low by 1 or 2.
+    // Round x up and y down (so q >= 1 when x >= y), then subtract 1.
+    uint32_t q = __float2uint_rz(__fdividef(__uint2float_ru(x), __uint2float_rz(y)));
+//    if (q != 0)
+//      q -= 1;  // Don't let q go negative, which can happen when x < y.
+    x -= q * y; 
     if (x >= y)
       x -= y, q += 1;
-    return q;
+    return q;          //  Could be too small by 1.
   }
   
   template
@@ -323,7 +320,7 @@ namespace  //  used only within this compilation unit.
   uint32_t
   modInv(uint32_t u, uint32_t v)
   {
-    constexpr uint32_t FLOAT_THRESHOLD = 1 << 24;
+    constexpr uint32_t FLOAT_THRESHOLD = 1 << 22; // So 2 ulp accuracy means error <= 0.5.
   
     uint32_t u2u = 0, u3u = u;
     uint32_t v2u = 1, v3u = v;
@@ -356,6 +353,7 @@ namespace  //  used only within this compilation unit.
     //  If u3f == 0.0, then v3f == 1.0 and result is in v2u.
     float u3f = __uint2float_rz(u3u);
     float v3f = __uint2float_rz(v3u);
+    
     while (u3f > 1.0)
       {
         v2u += u2u * quasiQuoRem(v3f, u3f);
