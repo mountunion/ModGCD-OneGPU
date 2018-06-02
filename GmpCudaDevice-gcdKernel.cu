@@ -262,40 +262,41 @@ namespace  //  used only within this compilation unit.
   }
   
   //  This version of quoRem requires that x and y be truncated integers
-  //  and that (1 << 24) > x > y >= 2.
+  //  and that (1 << 24) > x, y >= 2.
   //  Note that __fdividef(x, y) is accurate to 2 ulp;
   //  when x and y are in this range, 1 < floor(x/y) < 2^23 means
   //  2 ulp <= 1.0, so__fdividef should give a result within +/-1
   //  of the true quotient.
+  //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
   __device__
   inline
   uint32_t
-  quoRem(float& x, float y)
+  quasiQuoRem(float& x, float y)
   {
-    float q = truncf(__fdividef(x, y));
+    // Estimate of q could be too high or too low by 1;
+    // Make it too low by 1 or two.
+    float q = truncf(__fdividef(x, y)) - 1.0;
     x -= q*y;
-    // Estimate of q could be too high or too low by 1.
-    if (x < 0.0)
-      x += y, q -= 1.0;
     if (x >= y)
       x -= y, q += 1.0;
     return __float2uint_rz(q);
   }
 
   //  Faster divide possible when x and y are close in size?
-  //  Precondition: 2^32 > x > y >= 2^24, so 1 <= x / y < 2^8
+  //  Precondition: 2^32 > x, y >= 2^24, so 1 <= x / y < 2^8
+  //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
   __device__
   inline
   uint32_t
-  quoRemSmallQuo(uint32_t& x, uint32_t y)
+  quasiQuoRemSmallQuo(uint32_t& x, uint32_t y)
   { 
     //  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
-    //  Round x up and y down, so q >= 1.
-    uint32_t q = truncf(__fdividef(__uint2float_ru(x), __uint2float_rz(y)));
-    q -= 1;  //  Adjust quotient so that it is never an overestimate; otherwise y * q might overflow uint32_t.
-    x -= y * q;
-//    if (x >= y)
-//      x -= y, q += 1;
+    // Estimate of q could be too high or too low by 1;
+    // Make it too low by 1 or two.
+    // Round x up and y down, so q >= 1, then subtract 1.
+    uint32_t q = __float2uint_rz(__fdividef(__uint2float_ru(x), __uint2float_rz(y))) - 1;
+  //  q -= 1;  //  Adjust quotient so that it is never an overestimate; otherwise y * q might overflow uint32_t.
+    x -= q * y;
     if (x >= y)
       x -= y, q += 1;
     return q;
@@ -330,10 +331,10 @@ namespace  //  used only within this compilation unit.
     //  When u3 and v3 are both large enough, divide with floating point hardware.
     while  (v3u >= FLOAT_THRESHOLD)
       {
-        u2u += v2u * quoRemSmallQuo(u3u, v3u);
+        u2u += v2u * quasiQuoRemSmallQuo(u3u, v3u);
         if (u3u <  FLOAT_THRESHOLD)
           break;
-        v2u += u2u * quoRemSmallQuo(v3u, u3u);
+        v2u += u2u * quasiQuoRemSmallQuo(v3u, u3u);
       }
       
     bool swapped;
@@ -357,8 +358,8 @@ namespace  //  used only within this compilation unit.
     float v3f = __uint2float_rz(v3u);
     while (u3f > 1.0)
       {
-        v2u += u2u * quoRem(v3f, u3f);
-        u2u += v2u * quoRem(u3f, v3f);
+        v2u += u2u * quasiQuoRem(v3f, u3f);
+        u2u += v2u * quasiQuoRem(u3f, v3f);
       }
       
     return  (u3f == 1.0)  ? (swapped) ?     u2u : u - u2u 
