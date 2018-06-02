@@ -290,9 +290,9 @@ namespace  //  used only within this compilation unit.
     // The __fdividef estimate of q could be too high or too low by 1;
     // make it too low by 1 or 2.
     // Round x up and y down (so q >= 1 when x >= y), then subtract 1.
-    uint32_t q = __float2uint_rz(__fdividef(__uint2float_ru(x), __uint2float_rz(y)));
-//    if (q != 0)
-//      q -= 1;  // Don't let q go negative, which can happen when x < y.
+    uint32_t q = __float2uint_rz(__fdividef(__uint2float_rz(x), __uint2float_rz(y)));
+    if (q != 0)   // Rule out q too high, but don't let q go negative.
+      q -= 1;
     x -= q * y; 
     if (x >= y)
       x -= y, q += 1;
