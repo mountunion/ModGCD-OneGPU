@@ -92,5 +92,5 @@ clean:
 
 distclean: clean
 	rm createModuli || true
-	rm -rf GmpCudaModuli.cu || true
+	rm -rf GmpCudaModuli.cpp || true
 	rm -rf tests || true
