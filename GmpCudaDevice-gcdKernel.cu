@@ -275,7 +275,7 @@ namespace  //  used only within this compilation unit.
   {
     float q = truncf(__fdividef(x, y));
     x -= q*y; 
-    return __float2uint_rz(q);  //  Could be too small by 1.
+    return __float2uint_rz(q);  //  Could still be too small by 1.
   }
 
   //  Faster divide possible when x and y are close in size?
@@ -284,19 +284,17 @@ namespace  //  used only within this compilation unit.
   __device__
   inline
   uint32_t
-  quasiQuoRemSmallQuo(uint32_t& x, uint32_t y)
+  quasiQuoRem(uint32_t& x, uint32_t y)
   { 
     //  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
     // The __fdividef estimate of q could be too high or too low by 1;
     // make it too low by 1 or 2.
-    // Round x up and y down (so q >= 1 when x >= y), then subtract 1.
+    // Subtract 1.0 BEFORE rounding toward zero.
     uint32_t q = __float2uint_rz(__fdividef(__uint2float_rz(x), __uint2float_rz(y)) - 1.0);
-//    if (q != 0)   // Rule out q too high, but don't let q go negative.
-//      q -= 1;
     x -= q * y; 
     if (x >= y)
       x -= y, q += 1;
-    return q;          //  Could be too small by 1.
+    return q;          //  Could still be too small by 1.
   }
   
   template
@@ -328,10 +326,10 @@ namespace  //  used only within this compilation unit.
     //  When u3 and v3 are both large enough, divide with floating point hardware.
     while  (v3u >= FLOAT_THRESHOLD)
       {
-        u2u += v2u * quasiQuoRemSmallQuo(u3u, v3u);
+        u2u += v2u * quasiQuoRem(u3u, v3u);
         if (u3u <  FLOAT_THRESHOLD)
           break;
-        v2u += u2u * quasiQuoRemSmallQuo(v3u, u3u);
+        v2u += u2u * quasiQuoRem(v3u, u3u);
       }
       
     bool swapped;
