@@ -88,7 +88,7 @@ GmpCudaModuli.o: GmpCudaModuli.cpp GmpCuda.h
 	$(CXX) $(CXXFLAGS) -c $<
 
 clean:
-	rm *.o testmodgcd testmodgcd-nogpu || true
+	rm *.o testmodgcd testmodgcd-nogpu testmodgcd-coop-gps || true
 
 distclean: clean
 	rm createModuli || true
