@@ -278,6 +278,24 @@ namespace  //  used only within this compilation unit.
     return __float2uint_rz(q);  //  Could still be too small by 1.
   }
 
+
+  //  For the case 2^32 > x >= 2^22 && 2^22 > y > 0.
+  __device__
+  inline
+  uint32_t
+  quasiQuoRem(float& xf, float& yf, uint32_t x, uint32_t y)
+  {
+    yf = __uint2float_rz(y);
+#if 0
+    uint32_t q = __float2uint_rz(__fdividef(__uint2float_rz(x >> 10), yf)) << 10; 
+    q += __float2uint_rz(__fdividef(__uint2float_rz(x - q * y), yf) - 1.0);
+#else
+    uint32_t q = x / y;
+#endif
+    xf = __uint2float_rz(x - q * y);
+    return q;
+  }
+
   //  Faster divide possible when x and y are close in size?
   //  Precondition: 2^32 > x, y >= 2^22, so 1 <= x / y < 2^10
   //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
@@ -339,18 +357,16 @@ namespace  //  used only within this compilation unit.
         swap(u3u, v3u);
       }
 
-    //  u3u >= FLOAT_THRESHOLD && FLOAT_THRESHOLD > v3u.
-    //  Will need one integer reduction.
-    u2u += v2u * (u3u / v3u);
-    u3u %= v3u;
+    //  u3u >= FLOAT_THRESHOLD > v3u.
+    //  Transition to both u3u and v3u small.
+    float u3f, v3f;
+    u2u += v2u * quasiQuoRem(u3f, v3f, u3u, v3u);
       
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
     //  At this point v3f > u3f.
     //  The loop will stop when u3f <= 1.0.
     //  If u3f == 1.0, result is in u2u.
     //  If u3f == 0.0, then v3f == 1.0 and result is in v2u.
-    float u3f = __uint2float_rz(u3u);
-    float v3f = __uint2float_rz(v3u);
     
     while (u3f > 1.0)
       {
