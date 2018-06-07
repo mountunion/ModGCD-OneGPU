@@ -279,20 +279,33 @@ namespace  //  used only within this compilation unit.
   }
 
 
-  //  For the case 2^32 > x >= 2^22 && 2^22 > y > 0.
+  //  For the case 2^32 > x >= 2^22 > y > 0.
   __device__
   inline
   uint32_t
-  quasiQuoRem(float& xf, float& yf, uint32_t x, uint32_t y)
+  quoRem(float& xf, float& yf, uint32_t x, uint32_t y)
   {
+    constexpr bool USE_INTEGER_DIVISION = true;   
+    //  Floating point division uses slightly less time.
     yf = __uint2float_rz(y);
-#if 0
-    uint32_t q = __float2uint_rz(__fdividef(__uint2float_rz(x >> 10), yf)) << 10; 
-    q += __float2uint_rz(__fdividef(__uint2float_rz(x - q * y), yf) - 1.0);
-#else
-    uint32_t q = x / y;
-#endif
-    xf = __uint2float_rz(x - q * y);
+    uint32_t q;
+    if (USE_INTEGER_DIVISION)
+      {
+        q  = x / y;
+        x %= y; 
+      }
+    else
+      {
+        constexpr int T = 10;  //  This allows for 22-bit division.
+        q  = __float2uint_rz(__fdividef(__uint2float_rz(x >> T),    yf)) << T;
+        q += __float2uint_rz(__fdividef(__uint2float_rz(x - q * y), yf) - 1.0);
+        x -= q * y; 
+        if (x >= y)
+          x -= y, q += 1;
+        if (x >= y)
+          x -= y, q += 1;
+      }
+    xf = __uint2float_rz(x);
     return q;
   }
 
@@ -358,9 +371,11 @@ namespace  //  used only within this compilation unit.
       }
 
     //  u3u >= FLOAT_THRESHOLD > v3u.
-    //  Transition to both u3u and v3u small.
+    //  Transition to both u3u and v3u small, so values are cast into floats.
+    //  Althugh algorithm can tolerate a quasi-quotient here (perhaps one less than
+    //  the true quotient), the true quotient is faster than the quasi-quotient.
     float u3f, v3f;
-    u2u += v2u * quasiQuoRem(u3f, v3f, u3u, v3u);
+    u2u += v2u * quoRem(u3f, v3f, u3u, v3u);
       
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
     //  At this point v3f > u3f.
