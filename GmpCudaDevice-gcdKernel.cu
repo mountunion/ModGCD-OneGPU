@@ -285,7 +285,7 @@ namespace  //  used only within this compilation unit.
   uint32_t
   quoRem(float& xf, float& yf, uint32_t x, uint32_t y)
   {
-    constexpr bool USE_INTEGER_DIVISION = true;   
+    constexpr bool USE_INTEGER_DIVISION = false;   
     //  Floating point division uses slightly less time.
     yf = __uint2float_rz(y);
     uint32_t q;
@@ -297,7 +297,7 @@ namespace  //  used only within this compilation unit.
     else
       {
         constexpr int T = 10;  //  This allows for 22-bit division.
-        q  = __float2uint_rz(__fdividef(__uint2float_rz(x >> T),    yf)) << T;
+        q  = __float2uint_rz(__fdividef(__uint2float_rz(x >> T   ), yf)      ) << T;
         q += __float2uint_rz(__fdividef(__uint2float_rz(x - q * y), yf) - 1.0);
         x -= q * y; 
         if (x >= y)
@@ -382,7 +382,6 @@ namespace  //  used only within this compilation unit.
     //  The loop will stop when u3f <= 1.0.
     //  If u3f == 1.0, result is in u2u.
     //  If u3f == 0.0, then v3f == 1.0 and result is in v2u.
-    
     while (u3f > 1.0)
       {
         v2u += u2u * quasiQuoRem(v3f, u3f);
