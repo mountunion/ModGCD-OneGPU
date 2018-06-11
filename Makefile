@@ -30,7 +30,7 @@ NVCCFLAGS= $(CXXFLAGS) --device-c
 LD=nvcc
 LDFLAGS=$(CUDA_ARCH)
 
-GCD_KERN_FLAGS=--use_fast_math $(CUDA_ARCH) -maxrregcount 32
+GCD_KERN_FLAGS=--ftz=true --maxrregcount=32 $(CUDA_ARCH)
 
 .PHONY: all clean distclean
 

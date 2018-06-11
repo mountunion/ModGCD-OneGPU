@@ -280,33 +280,21 @@ namespace  //  used only within this compilation unit.
 
 
   //  For the case 2^32 > x >= 2^22 > y > 0.
+  //  Using floating point division is slightly faster than using integer division here.
   __device__
   inline
   uint32_t
   quoRem(float& xf, float& yf, uint32_t x, uint32_t y)
   {
-    constexpr bool USE_INTEGER_DIVISION = false;   
-    //  Floating point division uses slightly less time.
     yf = __uint2float_rz(y);
-    uint32_t q;
-    if (USE_INTEGER_DIVISION)
-      {
-        q  = x / y;
-        x %= y; 
-      }
-    else
-      {
-        constexpr int T = 10;  //  This allows for 22-bit division.
-        q  = __float2uint_rz(__fdividef(__uint2float_rz(x >> T   ), yf)      ) << T;
-        q += __float2uint_rz(__fdividef(__uint2float_rz(x - q * y), yf) - 1.0);
-        x -= q * y; 
-        if (x >= y)
-          x -= y, q += 1;
-        if (x >= y)
-          x -= y, q += 1;
-      }
-    xf = __uint2float_rz(x);
-    return q;
+    constexpr int T = 10;  //  This allows for 22-bit division.
+    float yfInv = __fdividef(1.0, yf);
+    uint32_t q = __float2uint_rz(__uint2float_rz(x >> T) * yfInv) << T;
+    q += __float2uint_rz(__fmaf_rz(__uint2float_rz(x - q * y), yfInv, -1.0));
+    xf = __uint2float_rz(x - q * y);
+    float q2f = trunc(xf * yfInv);
+    xf -= q2f * yf;
+    return q + __float2uint_rz(q2f);
   }
 
   //  Faster divide possible when x and y are close in size?
@@ -321,7 +309,8 @@ namespace  //  used only within this compilation unit.
     // The __fdividef estimate of q could be too high or too low by 1;
     // make it too low by 1 or 2.
     // Subtract 1.0 BEFORE rounding toward zero.
-    uint32_t q = __float2uint_rz(__fdividef(__uint2float_rz(x), __uint2float_rz(y)) - 1.0);
+    float yfInv = __fdividef(1.0, __uint2float_rz(y));
+    uint32_t q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), yfInv, -1.0));
     x -= q * y; 
     if (x >= y)
       x -= y, q += 1;
