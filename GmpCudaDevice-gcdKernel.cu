@@ -275,7 +275,7 @@ namespace  //  used only within this compilation unit.
   {
     float q = truncf(__fdividef(x, y));
     x -= q*y; 
-    return -__float2uint_rz(q);  //  Could still be too small by 1.
+    return __float2uint_rz(q);  //  Could still be too small by 1.
   }
 
   //  For the case 2^32 > x >= 2^22 > y > 0.
@@ -372,8 +372,8 @@ namespace  //  used only within this compilation unit.
     //  If u3f == 0.0, then v3f == 1.0 and result is in v2u.
     while (u3f > 1.0)
       {
-        v2u -= u2u * quasiQuoRem(v3f, u3f);  //q is negative.
-        u2u -= v2u * quasiQuoRem(u3f, v3f);
+        v2u += u2u * quasiQuoRem(v3f, u3f);
+        u2u += v2u * quasiQuoRem(u3f, v3f);
       }
       
     return  (u3f == 1.0)  ? (swapped) ?     u2u : u - u2u 
