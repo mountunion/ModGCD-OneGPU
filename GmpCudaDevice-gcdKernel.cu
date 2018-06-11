@@ -270,14 +270,13 @@ namespace  //  used only within this compilation unit.
   //  We allow a quotient that's too small by 1, since modInv can tolerate that.
   __device__
   inline
-  uint32_t
+  int32_t
   quasiQuoRem(float& x, float y)
   {
     float q = truncf(__fdividef(x, y));
     x -= q*y; 
-    return __float2uint_rz(q);  //  Could still be too small by 1.
+    return -__float2uint_rz(q);  //  Could still be too small by 1.
   }
-
 
   //  For the case 2^32 > x >= 2^22 > y > 0.
   //  Using floating point division is slightly faster than using integer division here.
@@ -364,7 +363,7 @@ namespace  //  used only within this compilation unit.
     //  Althugh algorithm can tolerate a quasi-quotient here (perhaps one less than
     //  the true quotient), the true quotient is faster than the quasi-quotient.
     float u3f, v3f;
-    u2u += v2u * quoRem(u3f, v3f, u3u, v3u);
+    u2u += v2u * quoRem(u3f, v3f, u3u, v3u); 
       
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
     //  At this point v3f > u3f.
@@ -373,8 +372,8 @@ namespace  //  used only within this compilation unit.
     //  If u3f == 0.0, then v3f == 1.0 and result is in v2u.
     while (u3f > 1.0)
       {
-        v2u += u2u * quasiQuoRem(v3f, u3f);
-        u2u += v2u * quasiQuoRem(u3f, v3f);
+        v2u -= u2u * quasiQuoRem(v3f, u3f);  //q is negative.
+        u2u -= v2u * quasiQuoRem(u3f, v3f);
       }
       
     return  (u3f == 1.0)  ? (swapped) ?     u2u : u - u2u 
