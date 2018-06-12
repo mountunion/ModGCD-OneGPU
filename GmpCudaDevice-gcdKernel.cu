@@ -22,7 +22,7 @@
   See GmpCudaDevice.cu for revision history.
 */
 
-//  Enforce use of CUDA 9 at compile time.
+//  Enforce use of CUDA 9 or higher at compile time.
 #if defined(CUDART_VERSION) && CUDART_VERSION >= 9000
 #else
 #error Requires CUDA 9 or more recent
@@ -84,7 +84,8 @@ namespace  //  used only within this compilation unit.
   //  Postcondition: every thread will have the same pair.
   __device__
   void
-  collectAnyPairPriorityNonzero(pair_t& pair, GmpCudaBarrier &bar)
+  collectAnyPairPriorityNonzero(pair_t& __restrict__ pair, 
+                                GmpCudaBarrier& __restrict__ bar)
   {
     __shared__ pair_t sharedPair[WARP_SZ];
     
@@ -131,7 +132,7 @@ namespace  //  used only within this compilation unit.
   //  Postcondition: bar is ready for collectMinPair to be called.
   __device__
   void
-  postMinPair(pair_t pair, GmpCudaBarrier &bar)
+  postMinPair(pair_t pair, GmpCudaBarrier& bar)
   {
     __shared__ uint64_t sharedX[WARP_SZ];
  
@@ -165,7 +166,7 @@ namespace  //  used only within this compilation unit.
   //  Precondition: postMinPair was previously called and all threads participate.
   __device__
   void
-  collectMinPair(pair_t &pair, GmpCudaBarrier& bar)
+  collectMinPair(pair_t& __restrict__ pair, GmpCudaBarrier& __restrict__ bar)
   {
     uint64_t x;
     bar.collect(x);
@@ -210,7 +211,7 @@ namespace  //  used only within this compilation unit.
   __device__
   inline
   bool
-  equals(uint32_t x, modulus_t &m)
+  equals(uint32_t x, modulus_t m)
   {
     return (m.modulus == x);
   }
@@ -261,39 +262,66 @@ namespace  //  used only within this compilation unit.
     return (x >= m.modulus/2) ? x - m.modulus : x;
   }
   
+  __device__
+  inline
+  float
+  fastReciprocal(float xf)
+  {
+    float xfInv;
+    asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(xfInv) : "f"(xf));
+    return xfInv;
+  }
+  
   //  This version of quoRem requires that x and y be truncated integers
   //  and that (1 << 22) > x, y >= 1.
   //  Note that __fdividef(x, y) is accurate to 2 ulp;
-  //  when x and y are in this range, 0 <= floor(x/y) < 2^22 means
-  //  2 ulp <= 0.5, so trunc(__fdividef(-,-)) should give either the true quotient or
-  //  one less.
+  //  when x and y are in this range, 0 <= floor(x/y) < 2^22 means 2 ulp <= 0.5, 
+  //  so trunc(__fdividef(-,-)) should give either the true quotient or one less.
   //  We allow a quotient that's too small by 1, since modInv can tolerate that.
   __device__
   inline
-  int32_t
-  quasiQuoRem(float& x, float y)
+  uint32_t
+  quasiQuoRem(float& xf, float yf)
   {
-    float q = truncf(__fdividef(x, y));
-    x -= q*y; 
-    return __float2uint_rz(q);  //  Could still be too small by 1.
+    float qf = truncf(__fmul_rz(xf, fastReciprocal(yf)));
+    xf = __fmaf_rz(-qf, yf, xf); 
+    return __float2uint_rz(qf);  //  Could still be too small by 1.
   }
 
+  __device__
+  inline
+  uint32_t
+  quasiQuoSmall(uint32_t x, float rf)
+  { 
+    return __float2uint_rz(__fmul_rz(__uint2float_rz(x), rf));
+  }
+  
+  __device__
+  inline
+  uint32_t
+  quasiQuoLarge(uint32_t x, float rf)
+  { 
+    return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), rf, -1.0f));
+  }
+  
   //  For the case 2^32 > x >= 2^22 > y > 0.
   //  Using floating point division is slightly faster than using integer division here.
   __device__
   inline
   uint32_t
-  quoRem(float& xf, float& yf, uint32_t x, uint32_t y)
+  quoRem(float& __restrict__  xf, float& __restrict__ yf, uint32_t x, uint32_t y)
   {
-    yf = __uint2float_rz(y);
     constexpr int T = 10;  //  This allows for 22-bit division.
-    float yfInv = __fdividef(1.0, yf);
-    uint32_t q = __float2uint_rz(__uint2float_rz(x >> T) * yfInv) << T;
-    q += __float2uint_rz(__fmaf_rz(__uint2float_rz(x - q * y), yfInv, -1.0));
+    float qf, rf;
+    uint32_t q;
+    yf =  __uint2float_rz(y);
+    rf = fastReciprocal(yf);
+    q  = quasiQuoSmall(x >> T, rf) << T;
+    q += quasiQuoLarge(x - q * y, rf);
     xf = __uint2float_rz(x - q * y);
-    float q2f = trunc(xf * yfInv);
-    xf -= q2f * yf;
-    return q + __float2uint_rz(q2f);
+    qf = trunc(__fmul_rz(xf, rf));  //  q could be 1 or 2 too small--need to fix that.
+    xf = __fmaf_rz(-qf, yf, xf);
+    return q + __float2uint_rz(qf); //  Could q still be 1 too small after this?
   }
 
   //  Faster divide possible when x and y are close in size?
@@ -308,8 +336,7 @@ namespace  //  used only within this compilation unit.
     // The __fdividef estimate of q could be too high or too low by 1;
     // make it too low by 1 or 2.
     // Subtract 1.0 BEFORE rounding toward zero.
-    float yfInv = __fdividef(1.0, __uint2float_rz(y));
-    uint32_t q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), yfInv, -1.0));
+    uint32_t q = quasiQuoLarge(x, fastReciprocal(__uint2float_rz(y)));
     x -= q * y; 
     if (x >= y)
       x -= y, q += 1;
@@ -321,7 +348,7 @@ namespace  //  used only within this compilation unit.
   __device__
   inline
   void
-  swap(T& x, T& y)
+  swap(T& __restrict__ x, T& __restrict__ y)
   {
     T tmp = x;
     x = y;
@@ -372,7 +399,7 @@ namespace  //  used only within this compilation unit.
     //  If u3f == 0.0, then v3f == 1.0 and result is in v2u.
     while (u3f > 1.0)
       {
-        v2u += u2u * quasiQuoRem(v3f, u3f);
+        v2u += u2u * quasiQuoRem(v3f, u3f);  // q is negative to allow __fmaf.
         u2u += v2u * quasiQuoRem(u3f, v3f);
       }
       
@@ -438,7 +465,8 @@ namespace  //  used only within this compilation unit.
   //  Device kernel for the GmpCudaDevice::gcd method.
   __global__
   void
-  kernel(uint32_t* buf, size_t uSz, size_t vSz, uint32_t* moduliList, GmpCudaBarrier bar)
+  kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz, 
+         uint32_t* __restrict__ moduliList, GmpCudaBarrier bar)
   {
     int totalModuliRemaining = blockDim.x * gridDim.x;
     int ubits = (uSz + 1) * 32;  // somewhat of an overestimate
