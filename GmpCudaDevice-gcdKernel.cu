@@ -262,14 +262,49 @@ namespace  //  used only within this compilation unit.
     return (x >= m.modulus/2) ? x - m.modulus : x;
   }
   
+  //  Explicitly call the PTX rcp.approx.f32 instruction to get a fast approximation 
+  //  to the reciprocal of xf.  According to PTX ISA manual v 6.2,
+  //  "The maximum absolute error is 2^-23.0 over the range 1.0-2.0."
   __device__
   inline
   float
-  fastReciprocal(float xf)
+  fastReciprocal(float yf)
   {
-    float xfInv;
-    asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(xfInv) : "f"(xf));
-    return xfInv;
+    float rf;
+    asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(rf) : "f"(yf));
+    return rf;
+  }
+  
+  //  Computes an approximation for __float2uint32(xf) / __float2uint32(yf), 
+  //  when x < 2^22 && yf < 2^22.
+  //  rf == fastReciprocal(yf).
+  //  Approximation could be too small by 1.0.
+  __device__
+  inline
+  float
+  quasiQuo1(float xf, float rf)
+  { 
+    return truncf(__fmul_rz(xf, rf));
+  }
+  
+  __device__
+  inline
+  uint32_t
+  quasiQuo1(uint32_t x, float rf)
+  { 
+    return __float2uint_rz(__fmul_rz(__uint2float_rz(x), rf));
+  }
+  
+  //  Computes an approximation for x / __float2uint32(yf), 
+  //  when ???????????.
+  //  rf == fastReciprocal(yf).
+  //  Approximation could be too small by 1 or 2.
+  __device__
+  inline
+  uint32_t
+  quasiQuo2(uint32_t x, float rf)
+  { 
+    return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), rf, -1.0f));
   }
   
   //  This version of quoRem requires that x and y be truncated integers
@@ -283,60 +318,44 @@ namespace  //  used only within this compilation unit.
   uint32_t
   quasiQuoRem(float& xf, float yf)
   {
-    float qf = truncf(__fmul_rz(xf, fastReciprocal(yf)));
+    float qf = quasiQuo1(xf, fastReciprocal(yf));
     xf = __fmaf_rz(-qf, yf, xf); 
-    return __float2uint_rz(qf);  //  Could still be too small by 1.
+    return __float2uint_rz(qf);
   }
 
-  __device__
-  inline
-  uint32_t
-  quasiQuoSmall(uint32_t x, float rf)
-  { 
-    return __float2uint_rz(__fmul_rz(__uint2float_rz(x), rf));
-  }
-  
-  __device__
-  inline
-  uint32_t
-  quasiQuoLarge(uint32_t x, float rf)
-  { 
-    return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), rf, -1.0f));
-  }
-  
   //  For the case 2^32 > x >= 2^22 > y > 0.
-  //  Using floating point division is slightly faster than using integer division here.
+  //  Using floating point division here is slightly faster than integer quotient 
+  //  and remainder.
   __device__
   inline
   uint32_t
   quoRem(float& __restrict__  xf, float& __restrict__ yf, uint32_t x, uint32_t y)
   {
-    constexpr int T = 10;  //  This allows for 22-bit division.
     float qf, rf;
     uint32_t q;
-    yf =  __uint2float_rz(y);
+    yf = __uint2float_rz(y);
     rf = fastReciprocal(yf);
-    q  = quasiQuoSmall(x >> T, rf) << T;
-    q += quasiQuoLarge(x - q * y, rf);
+    q  = quasiQuo1(x >> 10, rf) << 10; //  x >> 10 fits into quasiQuo1 constraints.
+    q += quasiQuo2(x - q * y, rf);
     xf = __uint2float_rz(x - q * y);
-    qf = trunc(__fmul_rz(xf, rf));  //  q could be 1 or 2 too small--need to fix that.
+    qf = trunc(__fmul_rz(xf, rf));     //  q could be 1 or 2 too small--need to fix that.
     xf = __fmaf_rz(-qf, yf, xf);
-    return q + __float2uint_rz(qf); //  Could q still be 1 too small after this?
+    return q + __float2uint_rz(qf);    //  Could q still be 1 too small after this?
   }
 
   //  Faster divide possible when x and y are close in size?
   //  Precondition: 2^32 > x, y >= 2^22, so 1 <= x / y < 2^10
   //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
+  //  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
+  // The __fdividef estimate of q could be too high or too low by 1;
+  // make it too low by 1 or 2.
+  // Subtract 1.0 BEFORE rounding toward zero.
   __device__
   inline
   uint32_t
   quasiQuoRem(uint32_t& x, uint32_t y)
   { 
-    //  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
-    // The __fdividef estimate of q could be too high or too low by 1;
-    // make it too low by 1 or 2.
-    // Subtract 1.0 BEFORE rounding toward zero.
-    uint32_t q = quasiQuoLarge(x, fastReciprocal(__uint2float_rz(y)));
+    uint32_t q = quasiQuo2(x, fastReciprocal(__uint2float_rz(y)));
     x -= q * y; 
     if (x >= y)
       x -= y, q += 1;
