@@ -302,14 +302,6 @@ namespace  //  used only within this compilation unit.
     return truncf(__fmaf_rz(xf, rf, -1.0f));
   }
   
-  __device__
-  inline
-  uint32_t
-  quasiQuo2(uint32_t x, float rf)
-  { 
-    return __float2uint_rz(quasiQuo2(__uint2float_rz(x), rf));
-  }
-  
   //  This version of quoRem requires that x and y be truncated integers
   //  and that (1 << 22) > x, y >= 1.
   //  Note that __fdividef(x, y) is accurate to 2 ulp;
@@ -332,22 +324,19 @@ namespace  //  used only within this compilation unit.
   __device__
   inline
   uint32_t
-  quasiQuoRem(float& __restrict__  xf, float& __restrict__ yf, uint32_t x, uint32_t y)
+  makeSmallEnough(uint32_t& x, uint32_t y)
   {
-    float qf, rf;
+    float xf, yf, qf, rf;
     uint32_t q;
-    yf = __uint2float_rz(y);
+    int i = __clz(y) - 10;
+    yf = __uint2float_rz(y << i);
     rf = fastReciprocal(yf);
-    xf = __uint2float_rz(x >> 10);      //  x >> 10 fits into quasiQuo1 constraints.
-    qf = quasiQuo1(xf, rf);
-    q  = __float2uint_rz(qf) << 10;
-    xf = __uint2float_rz(x - q * y);    
-    qf = quasiQuo2(xf, rf); 
-    q += __float2uint_rz(qf);
-    xf = __uint2float_rz(x - q * y);    
-    qf = quasiQuo1(xf, rf);             //  Now xf < 3 * yf < 2^22; need to reduce again.
-    xf = __fmaf_rz(qf, -yf, xf);        //  Fused multiply-add has better accuracy.
-    return q + __float2uint_rz(qf);     //  Now xf < 2 * yf, but unlikely that xf >= yf.
+    xf = __uint2float_rz(x);    
+    qf = quasiQuo2(xf, rf);             //  x / (2^i * y) should be < 2^22.
+    q  = __float2uint_rz(qf) << i;
+    x -= q * y;
+    //  x < 3 * 2^i * y < 3 * 2^22 should be small enough to fit into a float now with no error.
+    return q;
   }
 
   //  Faster divide possible when x and y are close in size?
@@ -359,7 +348,7 @@ namespace  //  used only within this compilation unit.
   uint32_t
   quasiQuoRem(uint32_t& x, uint32_t y)
   { 
-    uint32_t q = quasiQuo2(x, fastReciprocal(__uint2float_rz(y)));
+    uint32_t q = __float2uint_rz(quasiQuo2(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y))));
     x -= q * y; 
     if (x >= y)             //  Now xf < 3 * yf < 2^22; need to reduce again.
       x -= y, q += 1;
@@ -412,8 +401,11 @@ namespace  //  used only within this compilation unit.
     //  Transition to both u3u and v3u small, so values are cast into floats.
     //  Althugh algorithm can tolerate a quasi-quotient here (perhaps one less than
     //  the true quotient), the true quotient is faster than the quasi-quotient.
-    float u3f, v3f;
-    u2u += v2u * quasiQuoRem(u3f, v3f, u3u, v3u); 
+    uint32_t q = makeSmallEnough(u3u, v3u); 
+    float u3f = __uint2float_rz(u3u);    
+    float v3f = __uint2float_rz(v3u);
+    q += quasiQuoRem(u3f, v3f);     
+    u2u += v2u * q;
       
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
     //  At this point v3f > u3f.
