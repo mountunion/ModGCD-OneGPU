@@ -22,7 +22,7 @@ GMPL=-lgmp
 CUDA_ARCH=-arch=sm_52 -gencode=arch=compute_52,code=sm_52 -gencode=arch=compute_60,code=sm_60 -gencode=arch=compute_61,code=sm_61 -gencode=arch=compute_70,code=sm_70
 
 CXX=g++
-CXXFLAGS=--std c++11 -O2 -m64
+CXXFLAGS=--std c++11 -O3 -m64
 
 NVCC=nvcc
 NVCCFLAGS= $(CXXFLAGS) --device-c 
@@ -31,6 +31,8 @@ LD=nvcc
 LDFLAGS=$(CUDA_ARCH)
 
 GCD_KERN_FLAGS=--ftz=true --maxrregcount=32 $(CUDA_ARCH)
+##GCD_KERN_FLAGS=--ftz=true --prec-div=false --maxrregcount=32 $(CUDA_ARCH)
+##GCD_KERN_FLAGS=--use_fast_math --maxrregcount=32 $(CUDA_ARCH)
 
 .PHONY: all clean distclean
 

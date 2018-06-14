@@ -275,7 +275,7 @@ namespace  //  used only within this compilation unit.
     return rf;
   }
   
-  //  Computes an approximation for __float2uint32(xf) / __float2uint32(yf), 
+  //  quasiQuo1 computes an approximation for __float2uint32(xf) / __float2uint32(yf), 
   //  when x < 2^22 && yf < 2^22.
   //  rf == fastReciprocal(yf).
   //  Approximation could be too small by 1.0.
@@ -287,24 +287,27 @@ namespace  //  used only within this compilation unit.
     return truncf(__fmul_rz(xf, rf));
   }
   
-  __device__
-  inline
-  uint32_t
-  quasiQuo1(uint32_t x, float rf)
-  { 
-    return __float2uint_rz(__fmul_rz(__uint2float_rz(x), rf));
-  }
-  
   //  Computes an approximation for x / __float2uint32(yf), 
   //  when ???????????.
   //  rf == fastReciprocal(yf).
   //  Approximation could be too small by 1 or 2.
+  //  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
+  //  make it too low by 1 or 2.
+  //  Subtract 1.0 BEFORE rounding toward zero.
+  __device__
+  inline
+  float
+  quasiQuo2(float xf, float rf)
+  { 
+    return truncf(__fmaf_rz(xf, rf, -1.0f));
+  }
+  
   __device__
   inline
   uint32_t
   quasiQuo2(uint32_t x, float rf)
   { 
-    return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), rf, -1.0f));
+    return __float2uint_rz(quasiQuo2(__uint2float_rz(x), rf));
   }
   
   //  This version of quoRem requires that x and y be truncated integers
@@ -319,7 +322,7 @@ namespace  //  used only within this compilation unit.
   quasiQuoRem(float& xf, float yf)
   {
     float qf = quasiQuo1(xf, fastReciprocal(yf));
-    xf = __fmaf_rz(-qf, yf, xf); 
+    xf = __fmaf_rz(qf, -yf, xf); 
     return __float2uint_rz(qf);
   }
 
@@ -329,27 +332,28 @@ namespace  //  used only within this compilation unit.
   __device__
   inline
   uint32_t
-  quoRem(float& __restrict__  xf, float& __restrict__ yf, uint32_t x, uint32_t y)
+  quasiQuoRem(float& __restrict__  xf, float& __restrict__ yf, uint32_t x, uint32_t y)
   {
     float qf, rf;
     uint32_t q;
     yf = __uint2float_rz(y);
     rf = fastReciprocal(yf);
-    q  = quasiQuo1(x >> 10, rf) << 10; //  x >> 10 fits into quasiQuo1 constraints.
-    q += quasiQuo2(x - q * y, rf);
-    xf = __uint2float_rz(x - q * y);
-    qf = trunc(__fmul_rz(xf, rf));     //  q could be 1 or 2 too small--need to fix that.
-    xf = __fmaf_rz(-qf, yf, xf);
-    return q + __float2uint_rz(qf);    //  Could q still be 1 too small after this?
+    xf = __uint2float_rz(x >> 10);      //  x >> 10 fits into quasiQuo1 constraints.
+    qf = quasiQuo1(xf, rf);
+    q  = __float2uint_rz(qf) << 10;
+    xf = __uint2float_rz(x - q * y);    
+    qf = quasiQuo2(xf, rf); 
+    q += __float2uint_rz(qf);
+    xf = __uint2float_rz(x - q * y);    
+    qf = quasiQuo1(xf, rf);             //  Now xf < 3 * yf < 2^22; need to reduce again.
+    xf = __fmaf_rz(qf, -yf, xf);        //  Fused multiply-add has better accuracy.
+    return q + __float2uint_rz(qf);     //  Now xf < 2 * yf, but unlikely that xf >= yf.
   }
 
   //  Faster divide possible when x and y are close in size?
   //  Precondition: 2^32 > x, y >= 2^22, so 1 <= x / y < 2^10
   //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
   //  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
-  // The __fdividef estimate of q could be too high or too low by 1;
-  // make it too low by 1 or 2.
-  // Subtract 1.0 BEFORE rounding toward zero.
   __device__
   inline
   uint32_t
@@ -357,13 +361,13 @@ namespace  //  used only within this compilation unit.
   { 
     uint32_t q = quasiQuo2(x, fastReciprocal(__uint2float_rz(y)));
     x -= q * y; 
-    if (x >= y)
+    if (x >= y)             //  Now xf < 3 * yf < 2^22; need to reduce again.
       x -= y, q += 1;
-    return q;          //  Could still be too small by 1.
+    return q;               //  Now xf < 2 * yf, but unlikely that xf >= yf.
   }
   
   template
-  <class T>
+  <typename T>
   __device__
   inline
   void
@@ -409,7 +413,7 @@ namespace  //  used only within this compilation unit.
     //  Althugh algorithm can tolerate a quasi-quotient here (perhaps one less than
     //  the true quotient), the true quotient is faster than the quasi-quotient.
     float u3f, v3f;
-    u2u += v2u * quoRem(u3f, v3f, u3u, v3u); 
+    u2u += v2u * quasiQuoRem(u3f, v3f, u3u, v3u); 
       
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
     //  At this point v3f > u3f.
@@ -418,7 +422,7 @@ namespace  //  used only within this compilation unit.
     //  If u3f == 0.0, then v3f == 1.0 and result is in v2u.
     while (u3f > 1.0)
       {
-        v2u += u2u * quasiQuoRem(v3f, u3f);  // q is negative to allow __fmaf.
+        v2u += u2u * quasiQuoRem(v3f, u3f);
         u2u += v2u * quasiQuoRem(u3f, v3f);
       }
       
