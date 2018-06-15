@@ -262,12 +262,10 @@ namespace  //  used only within this compilation unit.
     return (x >= m.modulus/2) ? x - m.modulus : x;
   }
   
-  //  Computes an approximation for x / y, 
-  //  when ???????????.
+  //  Computes an approximation for x / y, when x, y >= 2^21.
   //  Approximation could be too small by 1 or 2.
   //  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
-  //  make it too low by 1 or 2.
-  //  Subtract 1.0 BEFORE rounding toward zero.
+  //  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
   __device__
   inline
   uint32_t
@@ -279,12 +277,16 @@ namespace  //  used only within this compilation unit.
     return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), rf, -1.0f));
   }
   
-  //  This version of quoRem requires that x and y be truncated integers
-  //  and that (1 << 22) > x, y >= 1.
-  //  Note that __fdividef(x, y) is accurate to 2 ulp;
-  //  when x and y are in this range, 0 <= floor(x/y) < 2^22 means 2 ulp <= 0.5, 
-  //  so trunc(__fdividef(-,-)) should give either the true quotient or one less.
-  //  We allow a quotient that's too small by 1, since modInv can tolerate that.
+  //  quasiQuoRem computes a quotient qf such that xf - qf * yf < 2 * yf.
+  //  Precondition: xf and yf are truncated integers and 
+  //  3*2^22 > xf, yf >= 1.0 unless y == 2.0, in which case 3*2^21 > xf.
+  //  Note that __fdividef(x, y) is accurate to 2 ulp:
+  //  when yf >= 4.0, 0 <= xf/yf < 3*2^20 < 2^22 means 2 ulp <= 0.5,
+  //  so truncf(__fdividef(xf, yf)) should give either the true quotient or one less.
+  //  When yf == 2.0, 0 <= xf/2.0 < 3*2^20, so 2 ulp <= 0.5.
+  //  When yf == 3.0, 0 <= xf/3.0 < 3^22.
+  //  When yf == 1.0, the quotient should always be exact and equal to xf, 
+  //  since __fdividef(xf, yf) is based on multiplication by the reciprocal.
   __device__
   inline
   uint32_t
@@ -311,7 +313,7 @@ namespace  //  used only within this compilation unit.
   }
 
   //  Faster divide possible when x and y are close in size?
-  //  Precondition: 2^32 > x, y >= 2^22, so 1 <= x / y < 2^10
+  //  Precondition: 2^32 > x, y >= 2^21, so 1 <= x / y < 2^11
   //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
   //  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
   __device__
