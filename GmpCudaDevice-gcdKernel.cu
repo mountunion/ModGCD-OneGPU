@@ -262,30 +262,6 @@ namespace  //  used only within this compilation unit.
     return (x >= m.modulus/2) ? x - m.modulus : x;
   }
   
-  //  Explicitly call the PTX rcp.approx.f32 instruction to get a fast approximation 
-  //  to the reciprocal of xf.  According to PTX ISA manual v 6.2,
-  //  "The maximum absolute error is 2^-23.0 over the range 1.0-2.0."
-  __device__
-  inline
-  float
-  fastReciprocal(float yf)
-  {
-    float rf;
-    asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(rf) : "f"(yf));
-    return rf;
-  }
-  
-  //  quasiQuo1 computes an approximation for __float2uint32(xf) / __float2uint32(yf), 
-  //  when x < 2^22 && yf < 2^22.
-  //  Approximation could be too small by 1.0.
-  __device__
-  inline
-  float
-  quasiQuo1(float xf, float yf)
-  { 
-    return truncf(__fmul_rz(xf, fastReciprocal(yf)));
-  }
-  
   //  Computes an approximation for x / y, 
   //  when ???????????.
   //  Approximation could be too small by 1 or 2.
@@ -297,7 +273,10 @@ namespace  //  used only within this compilation unit.
   uint32_t
   quasiQuo2(uint32_t x, uint32_t y)
   { 
-    return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
+    float rf;
+    float yf = __uint2float_rz(y);
+    asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(rf) : "f"(yf));
+    return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), rf, -1.0f));
   }
   
   //  This version of quoRem requires that x and y be truncated integers
@@ -311,7 +290,7 @@ namespace  //  used only within this compilation unit.
   uint32_t
   quasiQuoRem(float& xf, float yf)
   {
-    float qf = quasiQuo1(xf, yf);
+    float qf = truncf(__fdividef(xf, yf));
     xf = __fmaf_rz(qf, -yf, xf); 
     return __float2uint_rz(qf);
   }
