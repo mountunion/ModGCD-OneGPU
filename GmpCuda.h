@@ -102,6 +102,7 @@ namespace GmpCuda
     static const void* gcdKernelSlow;
     const void* gcdKernel;
     launcher_t kernelLauncher;
+    bool deviceHasGoodRcpApprox(char *devName);
   public:
     static constexpr int GCD_BLOCK_SZ = WARP_SZ << 3; // Must be a power of 2 and a multiple of WARP_SZ.
     static constexpr int MAX_THREADS  = GCD_BLOCK_SZ * GCD_BLOCK_SZ;
@@ -117,7 +118,7 @@ namespace GmpCuda
     GmpCudaDevice(void);
     ~GmpCudaDevice();
     void gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error);
-    int inline getMaxGridSize() const {return maxGridSize;}
+    int inline getMaxGridSize(void) const {return maxGridSize;}
   };
   
   constexpr int L          = 32;

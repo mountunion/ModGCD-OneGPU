@@ -307,7 +307,7 @@ namespace  //  used only within this compilation unit.
   {
     float qf = truncf(__fmul_rz(xf, fastReciprocal(yf)));
     xf = __fmaf_rz(qf, -yf, xf); 
-    if (!RCP_APPROX_NEVER_HIGH)
+    if (!RCP_APPROX_NEVER_HIGH)  //  Have to check to see if the approximation was one too high.
       {
         if (xf < 0.0f)
           xf += yf, qf -= 1.0f;
