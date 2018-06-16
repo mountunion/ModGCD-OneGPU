@@ -299,12 +299,12 @@ namespace  //  used only within this compilation unit.
   //  with 2 ulp <= 2 * 2^
   //  so trunc(qf) == 1, which
   //  is the exact value of the true quotient.
+  template <bool RCP_APPROX_NEVER_HIGH>
   __device__
   inline
   uint32_t
   quasiQuoRem(float& xf, float yf)
   {
-    constexpr bool RCP_APPROX_NEVER_HIGH = false;      //  Safe default.
     float qf = truncf(__fmul_rz(xf, fastReciprocal(yf)));
     xf = __fmaf_rz(qf, -yf, xf); 
     if (!RCP_APPROX_NEVER_HIGH)
@@ -318,6 +318,7 @@ namespace  //  used only within this compilation unit.
   //  For the case 2^32 > x >= 2^22 > y > 0.
   //  Using floating point division here is slightly faster than integer quotient 
   //  and remainder.
+  template <bool RCP_APPROX_NEVER_HIGH>
   __device__
   inline
   uint32_t
@@ -327,7 +328,7 @@ namespace  //  used only within this compilation unit.
     uint32_t q = quasiQuo2(x, y << i) << i;
     xf = __uint2float_rz(x - q * y);
     yf = __uint2float_rz(y);
-    return q + quasiQuoRem(xf, yf);
+    return q + quasiQuoRem<RCP_APPROX_NEVER_HIGH>(xf, yf);  //safe alternative
   }
 
   //  Faster divide possible when x and y are close in size?
@@ -363,6 +364,7 @@ namespace  //  used only within this compilation unit.
   //  Uses the extended Euclidean algorithm:
   //  see Knuth, The Art of Computer Programming, vol. 2, 3/e,
   //  Algorithm X on pp342-3.
+  template <bool RCP_APPROX_NEVER_HIGH>
   __device__
   uint32_t
   modInv(uint32_t u, uint32_t v)
@@ -393,7 +395,7 @@ namespace  //  used only within this compilation unit.
     //  Althugh algorithm can tolerate a quasi-quotient here (perhaps one less than
     //  the true quotient), the true quotient is faster than the quasi-quotient.
     float u3f, v3f;
-    u2u += v2u * quasiQuoRem(u3f, v3f, u3u, v3u);
+    u2u += v2u * quasiQuoRem<RCP_APPROX_NEVER_HIGH>(u3f, v3f, u3u, v3u);
       
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
     //  At this point v3f > u3f.
@@ -402,8 +404,8 @@ namespace  //  used only within this compilation unit.
     //  If u3f == 0.0, then v3f == 1.0 and result is in v2u.
     while (u3f > 1.0)
       {
-        v2u += u2u * quasiQuoRem(v3f, u3f);
-        u2u += v2u * quasiQuoRem(u3f, v3f);
+        v2u += u2u * quasiQuoRem<RCP_APPROX_NEVER_HIGH>(v3f, u3f);
+        u2u += v2u * quasiQuoRem<RCP_APPROX_NEVER_HIGH>(u3f, v3f);
       }
       
     return  (u3f == 1.0)  ? (swapped) ?     u2u : u - u2u 
@@ -411,12 +413,13 @@ namespace  //  used only within this compilation unit.
   }
 
   // Calculate u/v mod m, in the range [0,m-1]
+  template <bool RCP_APPROX_NEVER_HIGH>
   __device__
   inline
   uint32_t
   modDiv(uint32_t u, uint32_t v, modulus_t m)
   {
-    return modMul(u, modInv(m.modulus, v), m);
+    return modMul(u, modInv<RCP_APPROX_NEVER_HIGH>(m.modulus, v), m);
   }
 
   //  Calculate x mod m for a multiword unsigned integer x.
@@ -466,6 +469,7 @@ namespace  //  used only within this compilation unit.
   }
 
   //  Device kernel for the GmpCudaDevice::gcd method.
+  template <bool RCP_APPROX_NEVER_HIGH>
   __global__
   void
   kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz, 
@@ -490,7 +494,7 @@ namespace  //  used only within this compilation unit.
 
     pair_t pair, myPair;
     myPair.modulus = q.modulus;
-    myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv(uq, vq, q), q);
+    myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv<RCP_APPROX_NEVER_HIGH>(uq, vq, q), q);
     postMinPair(myPair, bar);
     collectMinPair(pair, bar);
     
@@ -505,8 +509,8 @@ namespace  //  used only within this compilation unit.
             p = pair.modulus;
             if (p > q.modulus)        //  Bring within range.
               p -= q.modulus;
-            tq = modDiv(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
-            myPair.value = (tq == 0) ? MOD_INFINITY : toSigned(modDiv(vq, tq, q), q);
+            tq = modDiv<RCP_APPROX_NEVER_HIGH>(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
+            myPair.value = (tq == 0) ? MOD_INFINITY : toSigned(modDiv<RCP_APPROX_NEVER_HIGH>(vq, tq, q), q);
           }
         postMinPair(myPair, bar);
         if (active)
@@ -544,7 +548,7 @@ namespace  //  used only within this compilation unit.
             uint32_t p = pair.modulus;
             if (pair.modulus > q.modulus)  //  Bring within range.
               p -= q.modulus;
-            uq = modDiv(modSub(uq, fromSigned(pair.value, q), q), p, q);
+            uq = modDiv<RCP_APPROX_NEVER_HIGH>(modSub(uq, fromSigned(pair.value, q), q), p, q);
             myPair.value = toSigned(uq, q);
           }
         postAnyPairPriorityNonzero(myPair, bar);
@@ -569,5 +573,6 @@ namespace  //  used only within this compilation unit.
 }
 
 //  Now make the kernel's address available to the GmpCudaDevice class.
-const void* GmpCudaDevice::gcdKernel = reinterpret_cast<void *>(&kernel);
+const void* GmpCudaDevice::gcdKernelFast = reinterpret_cast<void *>(&kernel<true>);
+const void* GmpCudaDevice::gcdKernelSlow = reinterpret_cast<void *>(&kernel<false>);
 

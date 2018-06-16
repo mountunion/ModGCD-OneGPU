@@ -47,13 +47,13 @@ static:
 	$(MAKE) clean
 	$(MAKE) GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)"
 
-testmodgcd: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
+testmodgcd: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o GmpCudaDevice-devicesWithGoodRcpApprox.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
 
 ##
 ##  This target uses cooperative groups for inter-SM synchronization.
 ##
-testmodgcd-coop-gps: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel-coop-gps.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
+testmodgcd-coop-gps: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel-coop-gps.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o GmpCudaDevice-devicesWithGoodRcpApprox.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
 
 ##
@@ -88,6 +88,9 @@ GmpCudaModuli.cpp: createModuli GmpCuda.h
 
 GmpCudaModuli.o: GmpCudaModuli.cpp GmpCuda.h
 	$(CXX) $(CXXFLAGS) -c $<
+
+GmpCudaDevice-devicesWithGoodRcpApprox.o: GmpCudaDevice-devicesWithGoodRcpApprox.cpp GmpCuda.h
+	$(CXX) $(CXXFLAGS) -c $<  
 
 clean:
 	rm *.o testmodgcd testmodgcd-nogpu testmodgcd-coop-gps || true

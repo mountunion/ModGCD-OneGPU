@@ -89,6 +89,7 @@
 #endif
 
 #include <cassert>
+#include <cstring>
 #include <cuda_runtime.h>
 #include "GmpCuda.h"
 using namespace GmpCuda;
@@ -100,6 +101,16 @@ void GmpCudaDevice::setDevice(int devNo)
   if (devNo < 0 || devNo >= devCount)
     throw std::runtime_error("Invalid device number.");
   assert(cudaSuccess == cudaSetDevice(devNo)); 
+}
+
+bool deviceHasGoodRcpApprox(const char *devList[], char * deviceName)
+{
+  for (int i = 0; devList[i] != NULL; i += 1)
+    {
+      if (strcmp(deviceName, devList[i]) == 0)
+        return true;
+    }
+  return false;
 }
 
 //  Initialize the CUDA device.  The device number to use is passed in as a parameter.
@@ -120,6 +131,8 @@ GmpCudaDevice::GmpCudaDevice(void)
   kernelLauncher = (props.cooperativeLaunch == 1)
     ? static_cast<cudaError_t (*)(const void*, dim3, dim3, void**, size_t, cudaStream_t)>(&cudaLaunchCooperativeKernel)
     : static_cast<cudaError_t (*)(const void*, dim3, dim3, void**, size_t, cudaStream_t)>(&cudaLaunchKernel);
+    
+  gcdKernel = deviceHasGoodRcpApprox(devicesWithGoodRcpApprox, props.name) ? gcdKernelFast : gcdKernelSlow;
 
   //  Limit the grid, and thus, the barrier size also.
   int gcdOccupancy;
