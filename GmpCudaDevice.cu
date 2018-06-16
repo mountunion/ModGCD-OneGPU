@@ -89,7 +89,6 @@
 #endif
 
 #include <cassert>
-#include <cstring>
 #include <cuda_runtime.h>
 #include "GmpCuda.h"
 using namespace GmpCuda;

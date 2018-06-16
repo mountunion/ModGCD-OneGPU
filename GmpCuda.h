@@ -15,7 +15,6 @@
 #include <gmp.h>
 #include <stdint.h>
 #include <stdexcept>
-#include <string>
 #if defined(__CUDACC__) && defined(USE_COOP_GROUPS)
 #include <cooperative_groups.h>
 #endif
