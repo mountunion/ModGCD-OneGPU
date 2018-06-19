@@ -290,7 +290,7 @@ namespace  //  used only within this compilation unit.
   
   //  quasiQuoRem computes a quotient qf such that xf - qf * yf < 2 * yf.
   //  Precondition: xf and yf are truncated integers and 
-  //  if RCP_CAN_BE_HIGH == true,
+  //  if RCP_NEEDS_CHECK == true,
   //  then 3*2^22 > xf >= 1.0 && 2^22 > yf >= 1.0
   //  else 2^22 > xf, yf >= 1.0.
   //  Note that __fdividef(x, y) is accurate to 2 ulp:
@@ -305,7 +305,7 @@ namespace  //  used only within this compilation unit.
   //  with 2 ulp <= 2 * 2^
   //  so trunc(qf) == 1, which
   //  is the exact value of the true quotient.
-  template <bool RCP_CAN_BE_HIGH>
+  template <bool RCP_NEEDS_CHECK>
   __device__
   inline
   uint32_t
@@ -313,7 +313,7 @@ namespace  //  used only within this compilation unit.
   {
     float qf = truncf(__fmul_rz(xf, fastReciprocal(yf)));
     xf = __fmaf_rz(qf, -yf, xf); 
-    if (RCP_CAN_BE_HIGH && xf < 0.0f)
+    if (RCP_NEEDS_CHECK && xf < 0.0f)
       xf += yf, qf -= 1.0f;
     return __float2uint_rz(qf);
   }
@@ -366,7 +366,7 @@ namespace  //  used only within this compilation unit.
   //  Uses the extended Euclidean algorithm:
   //  see Knuth, The Art of Computer Programming, vol. 2, 3/e,
   //  Algorithm X on pp342-3.
-  template <bool RCP_CAN_BE_HIGH>
+  template <bool RCP_NEEDS_CHECK>
   __device__
   uint32_t
   modInv(uint32_t u, uint32_t v)
@@ -404,8 +404,8 @@ namespace  //  used only within this compilation unit.
     //  If u3f == 0.0, then v3f == 1.0 and result is in v2u.
     while (u3f > 1.0)
       {
-        v2u += u2u * quasiQuoRem<RCP_CAN_BE_HIGH>(v3f, u3f);
-        u2u += v2u * quasiQuoRem<RCP_CAN_BE_HIGH>(u3f, v3f);
+        v2u += u2u * quasiQuoRem<RCP_NEEDS_CHECK>(v3f, u3f);
+        u2u += v2u * quasiQuoRem<RCP_NEEDS_CHECK>(u3f, v3f);
       }
       
     return  (u3f == 1.0)  ? (swapped) ?     u2u : u - u2u 
@@ -413,13 +413,13 @@ namespace  //  used only within this compilation unit.
   }
 
   // Calculate u/v mod m, in the range [0,m-1]
-  template <bool RCP_CAN_BE_HIGH>
+  template <bool RCP_NEEDS_CHECK>
   __device__
   inline
   uint32_t
   modDiv(uint32_t u, uint32_t v, modulus_t m)
   {
-    return modMul(u, modInv<RCP_CAN_BE_HIGH>(m.modulus, v), m);
+    return modMul(u, modInv<RCP_NEEDS_CHECK>(m.modulus, v), m);
   }
 
   //  Calculate x mod m for a multiword unsigned integer x.
@@ -469,7 +469,7 @@ namespace  //  used only within this compilation unit.
   }
 
   //  Device kernel for the GmpCudaDevice::gcd method.
-  template <bool RCP_CAN_BE_HIGH>
+  template <bool RCP_NEEDS_CHECK>
   __global__
   void
   kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz, 
@@ -494,7 +494,7 @@ namespace  //  used only within this compilation unit.
 
     pair_t pair, myPair;
     myPair.modulus = q.modulus;
-    myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv<RCP_CAN_BE_HIGH>(uq, vq, q), q);
+    myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv<RCP_NEEDS_CHECK>(uq, vq, q), q);
     postMinPair(myPair, bar);
     collectMinPair(pair, bar);
     
@@ -509,8 +509,8 @@ namespace  //  used only within this compilation unit.
             p = pair.modulus;
             if (p > q.modulus)        //  Bring within range.
               p -= q.modulus;
-            tq = modDiv<RCP_CAN_BE_HIGH>(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
-            myPair.value = (tq == 0) ? MOD_INFINITY : toSigned(modDiv<RCP_CAN_BE_HIGH>(vq, tq, q), q);
+            tq = modDiv<RCP_NEEDS_CHECK>(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
+            myPair.value = (tq == 0) ? MOD_INFINITY : toSigned(modDiv<RCP_NEEDS_CHECK>(vq, tq, q), q);
           }
         postMinPair(myPair, bar);
         if (active)
@@ -548,7 +548,7 @@ namespace  //  used only within this compilation unit.
             uint32_t p = pair.modulus;
             if (pair.modulus > q.modulus)  //  Bring within range.
               p -= q.modulus;
-            uq = modDiv<RCP_CAN_BE_HIGH>(modSub(uq, fromSigned(pair.value, q), q), p, q);
+            uq = modDiv<RCP_NEEDS_CHECK>(modSub(uq, fromSigned(pair.value, q), q), p, q);
             myPair.value = toSigned(uq, q);
           }
         postAnyPairPriorityNonzero(myPair, bar);
