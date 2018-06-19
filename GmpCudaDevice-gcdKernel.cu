@@ -582,11 +582,13 @@ static int comparator(const void* s1, const void* s2Ptr)
   return strcmp(static_cast<const char*>(s1), *static_cast<char * const *>(s2Ptr));
 }
 
+//  Return the appropriate gcd kernel for a device to use, based on
+//  whether there needs to be a check performed after the rcp.approx reciprocal
+//  in quasiQuoRem.
 const void* GmpCudaDevice::getGcdKernel(char* devName)
 {
-constexpr size_t NUM_DEVICES_RCP_NO_CHECK = sizeof(devicesRcpNoCheck)/sizeof(char*);
   void* key = bsearch(static_cast<const void*>(devName), static_cast<const void*>(devicesRcpNoCheck), 
-                      NUM_DEVICES_RCP_NO_CHECK, sizeof(char*), &comparator);
+                      sizeof(devicesRcpNoCheck)/sizeof(char*), sizeof(char*), &comparator);
   return reinterpret_cast<const void *>((key == NULL) ? &kernel<true> : &kernel<false>);
 }
 

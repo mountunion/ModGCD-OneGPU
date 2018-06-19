@@ -103,5 +103,6 @@ clean:
 
 distclean: clean
 	rm createModuli || true
+	rm certifyQuasiQuoRem || true
 	rm -rf GmpCudaModuli.cpp || true
 	rm -rf tests || true
