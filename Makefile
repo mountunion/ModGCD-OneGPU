@@ -61,6 +61,15 @@ testmodgcd-coop-gps: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel-co
 ##  
 testmodgcd-nogpu: testmodgcd.cpp GmpCuda.h
 	$(CXX) $(CXXFLAGS) -DNO_GPU $< -o $@ $(GMPL)
+	
+##
+##  Target to certify quasiQuoRem works on specific device.
+##
+certifyQuasiQuoRem: certifyQuasiQuoRem.o
+	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
+
+certifyQuasiQuoRem.o: certifyQuasiQuoRem.cu
+	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $<
 
 testmodgcd.o: testmodgcd.cpp GmpCuda.h
 	$(CXX) $(CXXFLAGS) -c $<

@@ -32,7 +32,7 @@ quasiQuoRem(float& xf, float yf)
 
 __global__ void kernel(bool* fail)
 {
-  uint32_t LIMIT = 3 * (1 << 22); // 3 * (1 << 22);
+  constexpr uint32_t LIMIT = 1 << 22;
 
   for (uint32_t y = blockIdx.x * blockDim.x + threadIdx.x  + 1; y < LIMIT; y += blockDim.x * gridDim.x)
     {
@@ -41,10 +41,10 @@ __global__ void kernel(bool* fail)
         {
           float xf = __uint2float_rz(x);
           float qf = quasiQuoRem<false>(xf, yf);
-          uint32_t rem = __float2uint_rz(xf);
-          if (0.0 <= xf && rem < 2 * y)
+          if (xf >= 0.0f)
             continue;
-          *fail = false, printf("Failed for x == %u and y == %u: rem == %u, xf = %f\n", x, y, rem, xf);
+          *fail = true;
+          printf("Failed for x == %u and y == %u: qf == %f, xf = %f\n", x, y, qf, xf);
           return;
         }
     }

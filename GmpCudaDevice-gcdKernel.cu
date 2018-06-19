@@ -40,6 +40,10 @@ namespace  //  used only within this compilation unit.
   constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
   constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
 
+  constexpr int FLOAT_THRESHOLD_EXPT = 22; // So 2 ulp accuracy means error <= 0.5.  
+  constexpr uint32_t FLOAT_THRESHOLD = (1 << FLOAT_THRESHOLD_EXPT); // So 2 ulp accuracy means error <= 0.5.
+  
+
   typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
 
   //  This type is used to conveniently manipulate the modulus and its inverse.
@@ -286,7 +290,9 @@ namespace  //  used only within this compilation unit.
   
   //  quasiQuoRem computes a quotient qf such that xf - qf * yf < 2 * yf.
   //  Precondition: xf and yf are truncated integers and 
-  //  3*2^22 > xf, yf >= 1.0 unless y == 2.0, in which case 3*2^21 > xf.
+  //  if RCP_CAN_BE_HIGH == true,
+  //  then 3*2^22 > xf >= 1.0 && 2^22 > yf >= 1.0
+  //  else 2^22 > xf, yf >= 1.0.
   //  Note that __fdividef(x, y) is accurate to 2 ulp:
   //  when yf >= 4.0, 0 <= xf/yf < 3*2^20 < 2^22 means 2 ulp <= 0.5,
   //  so truncf(__fdividef(xf, yf)) should give either the true quotient or one less.
@@ -307,28 +313,24 @@ namespace  //  used only within this compilation unit.
   {
     float qf = truncf(__fmul_rz(xf, fastReciprocal(yf)));
     xf = __fmaf_rz(qf, -yf, xf); 
-    if (RCP_CAN_BE_HIGH)  //  Have to check to see if the approximation was one too high.
-      {
-        if (xf < 0.0f)
-          xf += yf, qf -= 1.0f;
-      }
+    if (RCP_CAN_BE_HIGH && xf < 0.0f)
+      xf += yf, qf -= 1.0f;
     return __float2uint_rz(qf);
   }
 
   //  For the case 2^32 > x >= 2^22 > y > 0.
   //  Using floating point division here is slightly faster than integer quotient 
   //  and remainder.
-  template <bool RCP_CAN_BE_HIGH>
   __device__
   inline
   uint32_t
   quasiQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
   {
-    int i = __clz(y) - 10;
+    int i = __clz(y) - (32 - FLOAT_THRESHOLD_EXPT);
     uint32_t q = quasiQuo2(x, y << i) << i;
     xf = __uint2float_rz(x - q * y);
     yf = __uint2float_rz(y);
-    return q + quasiQuoRem<RCP_CAN_BE_HIGH>(xf, yf);  //safe alternative
+    return q + quasiQuoRem<true>(xf, yf);  //need slower alternative
   }
 
   //  Faster divide possible when x and y are close in size?
@@ -369,8 +371,6 @@ namespace  //  used only within this compilation unit.
   uint32_t
   modInv(uint32_t u, uint32_t v)
   {
-    constexpr uint32_t FLOAT_THRESHOLD = 1 << 22; // So 2 ulp accuracy means error <= 0.5.
-  
     uint32_t u2u = 0, u3u = u;
     uint32_t v2u = 1, v3u = v;
     
@@ -395,7 +395,7 @@ namespace  //  used only within this compilation unit.
     //  Althugh algorithm can tolerate a quasi-quotient here (perhaps one less than
     //  the true quotient), the true quotient is faster than the quasi-quotient.
     float u3f, v3f;
-    u2u += v2u * quasiQuoRem<RCP_CAN_BE_HIGH>(u3f, v3f, u3u, v3u);
+    u2u += v2u * quasiQuoRem(u3f, v3f, u3u, v3u);
       
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
     //  At this point v3f > u3f.
