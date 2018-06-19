@@ -33,6 +33,8 @@
 #include <cstdlib>
 #include <cuda_runtime.h>
 #include "GmpCuda.h"
+#include "GmpCudaDevice-gcdDevicesRcpNoCheck.h"
+
 using namespace GmpCuda;
 
 namespace  //  used only within this compilation unit.
@@ -574,10 +576,17 @@ namespace  //  used only within this compilation unit.
   }
 }
 
+//  Used to find a device name in devicesRcpNoCheck.
+static int comparator(const void* s1, const void* s2Ptr)
+{
+  return strcmp(static_cast<const char*>(s1), *static_cast<char * const *>(s2Ptr));
+}
+
 const void* GmpCudaDevice::getGcdKernel(char* devName)
 {
+constexpr size_t NUM_DEVICES_RCP_NO_CHECK = sizeof(devicesRcpNoCheck)/sizeof(char*);
   void* key = bsearch(static_cast<const void*>(devName), static_cast<const void*>(devicesRcpNoCheck), 
-                      NUM_DEVICES_RCP_NO_CHECK, 256, reinterpret_cast<int(*)(const void*,const void*)>(strcmp));
+                      NUM_DEVICES_RCP_NO_CHECK, sizeof(char*), &comparator);
   return reinterpret_cast<const void *>((key == NULL) ? &kernel<true> : &kernel<false>);
 }
 

@@ -47,13 +47,13 @@ static:
 	$(MAKE) clean
 	$(MAKE) GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)"
 
-testmodgcd: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o GmpCudaDevice-devicesRcpNoCheck.o
+testmodgcd: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
 
 ##
 ##  This target uses cooperative groups for inter-SM synchronization.
 ##
-testmodgcd-coop-gps: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel-coop-gps.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o GmpCudaDevice-devicesRcpNoCheck.o
+testmodgcd-coop-gps: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel-coop-gps.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
 
 ##
@@ -83,10 +83,10 @@ GmpCudaDevice.o: GmpCudaDevice.cu GmpCuda.h
 GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -c $<
 
-GmpCudaDevice-gcdKernel.o: GmpCudaDevice-gcdKernel.cu GmpCuda.h
+GmpCudaDevice-gcdKernel.o: GmpCudaDevice-gcdKernel.cu GmpCudaDevice-gcdDevicesRcpNoCheck.h GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $<
 
-GmpCudaDevice-gcdKernel-coop-gps.o: GmpCudaDevice-gcdKernel.cu GmpCuda.h
+GmpCudaDevice-gcdKernel-coop-gps.o: GmpCudaDevice-gcdKernel.cu GmpCudaDevice-gcdDevicesRcpNoCheck.h GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -DUSE_COOP_GROUPS $(GCD_KERN_FLAGS) -c $< -o $@
 
 createModuli: createModuli.cpp GmpCuda.h
@@ -97,9 +97,6 @@ GmpCudaModuli.cpp: createModuli GmpCuda.h
 
 GmpCudaModuli.o: GmpCudaModuli.cpp GmpCuda.h
 	$(CXX) $(CXXFLAGS) -c $<
-
-GmpCudaDevice-devicesRcpNoCheck.o: GmpCudaDevice-devicesRcpNoCheck.cpp GmpCuda.h
-	$(CXX) $(CXXFLAGS) -c $<  
 
 clean:
 	rm *.o testmodgcd testmodgcd-nogpu testmodgcd-coop-gps || true

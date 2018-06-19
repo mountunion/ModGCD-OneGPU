@@ -97,8 +97,6 @@ namespace GmpCuda
     uint32_t* moduliList;
     int deviceNum;
     int maxGridSize;
-    static const size_t NUM_DEVICES_RCP_NO_CHECK;
-    static const char devicesRcpNoCheck[][256];
     const void* getGcdKernel(char* devName);
     const void* gcdKernel;
     launcher_t kernelLauncher;
