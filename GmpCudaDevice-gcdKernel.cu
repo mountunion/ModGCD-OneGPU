@@ -29,6 +29,8 @@
 #endif
 
 #include <cassert>
+#include <cstring>
+#include <cstdlib>
 #include <cuda_runtime.h>
 #include "GmpCuda.h"
 using namespace GmpCuda;
@@ -572,7 +574,10 @@ namespace  //  used only within this compilation unit.
   }
 }
 
-//  Now make the kernel's address available to the GmpCudaDevice class.
-const void* GmpCudaDevice::gcdKernelFast = reinterpret_cast<void *>(&kernel<false>);
-const void* GmpCudaDevice::gcdKernelSlow = reinterpret_cast<void *>(&kernel<true>);
+const void* GmpCudaDevice::getGcdKernel(char* devName)
+{
+  void* key = bsearch(static_cast<const void*>(devName), static_cast<const void*>(devicesRcpNoCheck), 
+                      NUM_DEVICES_RCP_NO_CHECK, 256, reinterpret_cast<int(*)(const void*,const void*)>(strcmp));
+  return reinterpret_cast<const void *>((key == NULL) ? &kernel<true> : &kernel<false>);
+}
 

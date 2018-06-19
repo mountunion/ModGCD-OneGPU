@@ -102,16 +102,6 @@ void GmpCudaDevice::setDevice(int devNo)
   assert(cudaSuccess == cudaSetDevice(devNo)); 
 }
 
-bool GmpCudaDevice::deviceHasGoodRcpApprox(char* devName)
-{
-  for (int i = 0; devicesWithGoodRcpApprox[i] != NULL; i += 1)
-    {
-      if (strcmp(devName, devicesWithGoodRcpApprox[i]) == 0)
-        return true;
-    }
-  return false;
-}
-
 //  Initialize the CUDA device.  The device number to use is passed in as a parameter.
 //  Also initializes the global barrier and the moduli list.
 GmpCudaDevice::GmpCudaDevice(void)
@@ -132,7 +122,7 @@ GmpCudaDevice::GmpCudaDevice(void)
     : static_cast<cudaError_t (*)(const void*, dim3, dim3, void**, size_t, cudaStream_t)>(&cudaLaunchKernel);
     
   //  The gcd kernel we want to use depends on whether the device has a "good" rcp.approx instruction.
-  gcdKernel = deviceHasGoodRcpApprox(props.name) ? gcdKernelFast : gcdKernelSlow;
+  gcdKernel = getGcdKernel(props.name);
 
   //  Limit the grid, and thus, the barrier size also.
   int gcdOccupancy;
