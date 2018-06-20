@@ -1,34 +1,18 @@
+/*  certifyQuasiQuoRem.cu
+
+    This program will certify that quasiQuoRem<false>(xf, yf) works correctly, 
+    as long as xf and yf are integers and 1 <= xf, yf < 2^22,
+    by testing the function on all possible input satisfying the preconditions.
+    
+    K. Weber
+    20-July, 2018.
+*/
+
 #include <cuda_runtime.h>
 #include <cassert>
 #include <stdio.h>
 #include <stdint.h>
-
-__device__
-inline
-float
-fastReciprocal(float yf)
-  {
-    float rf;
-    asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(rf) : "f"(yf));
-    return rf;
-  }
-  
-template <bool RCP_CAN_BE_HIGH>
-__device__
-inline
-uint32_t
-quasiQuoRem(float& xf, float yf)
-{
-  float qf = truncf(__fmul_rz(xf, fastReciprocal(yf)));
-  xf = __fmaf_rz(qf, -yf, xf); 
-  if (RCP_CAN_BE_HIGH)  //  Have to check to see if the approximation was one too high.
-    {
-      if (xf < 0.0f)
-        xf += yf, qf -= 1.0f;
-    }
-  return __float2uint_rz(qf);
-}
-
+#include "quasiQuoRem.h"
 
 __global__ void kernel(bool* fail)
 {

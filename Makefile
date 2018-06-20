@@ -66,7 +66,7 @@ testmodgcd-nogpu: testmodgcd.cpp GmpCuda.h
 ##  Target to certify quasiQuoRem works on specific device.
 ##
 certifyQuasiQuoRem: certifyQuasiQuoRem.o
-	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
+	$(LD) -Xcompiler -static-libstdc++ $(LDFLAGS) $^ -o $@
 
 certifyQuasiQuoRem.o: certifyQuasiQuoRem.cu
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $<
@@ -103,6 +103,5 @@ clean:
 
 distclean: clean
 	rm createModuli || true
-	rm certifyQuasiQuoRem || true
 	rm -rf GmpCudaModuli.cpp || true
 	rm -rf tests || true
