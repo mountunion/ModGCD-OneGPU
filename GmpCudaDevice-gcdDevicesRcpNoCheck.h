@@ -7,5 +7,6 @@ static const char* devicesRcpNoCheck[] =
 {
   "GeForce GTX 1080",
   "GeForce GTX 980 Ti",
+  "Tesla V100-SXM2-16GB",
 };
 
