@@ -295,11 +295,18 @@ namespace  //  used only within this compilation unit.
   uint32_t
   quasiQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
   {
+#if __CUDA_ARCH__ == 70
+    q = x / y;
+#else
     int i = __clz(y) - (32 - FLOAT_THRESHOLD_EXPT);
     uint32_t q = quasiQuo2(x, y << i) << i;
+#endif
     xf = __uint2float_rz(x - q * y);
     yf = __uint2float_rz(y);
-    return q + quasiQuoRem<true>(xf, yf);  //need slower alternative
+#if __CUDA_ARCH__ != 70
+    q += quasiQuoRem<true>(xf, yf);  //need slower alternative
+#endif
+    return q;
   }
 
   //  Faster divide possible when x and y are close in size?
