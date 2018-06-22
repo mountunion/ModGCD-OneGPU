@@ -290,27 +290,37 @@ namespace  //  used only within this compilation unit.
   //  For the case 2^32 > x >= 2^22 > y > 0.
   //  Using floating point division here is slightly faster than integer quotient 
   //  and remainder.
+/*  __device__
+  inline
+  uint32_t
+  quoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
+  {
+    uint32_t q = x / y;
+    xf = __uint2float_rz(x % y);
+    yf = __uint2float_rz(y);
+    return q;
+  } */
+  
+  //  For the case 2^32 > x >= 2^22 > y > 0.
+  //  Using floating point division here is slightly faster than integer quotient 
+  //  and remainder.
+  template <bool CHECK_RCP>
   __device__
   inline
   uint32_t
   quasiQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
   {
-#if __CUDA_ARCH__ == 700
-     uint32_t q = x / y;
-#else
     int i = __clz(y) - (32 - FLOAT_THRESHOLD_EXPT);
     uint32_t q = quasiQuo2(x, y << i) << i;
-#endif
     xf = __uint2float_rz(x - q * y);
     yf = __uint2float_rz(y);
-#if __CUDA_ARCH__ != 700
-    q += quasiQuoRem<true>(xf, yf);  //need slower alternative
-#endif
-    return q;
+    return q + quasiQuoRem<CHECK_RCP>(xf, yf);  //might need slower alternative
   }
 
-  //  Faster divide possible when x and y are close in size?
-  //  Precondition: 2^32 > x, y >= 2^21, so 1 <= x / y < 2^11
+
+
+  //  Faster divide possible when x and y are close in size.
+  //  Precondition: 2^32 > x, y >= FLOAT_THRESHOLD, so 1 <= x / y < 2^(32 - FLOAT_THRESHOLD_EXPT).
   //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
   //  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
   __device__
@@ -318,11 +328,15 @@ namespace  //  used only within this compilation unit.
   uint32_t
   quasiQuoRem(uint32_t& x, uint32_t y)
   { 
-    uint32_t q = quasiQuo2(x, y);
+  //  Computes an approximation q for x / y, when x, y >= FLOAT_THRESHOLD.
+  //  q could be too small by 1 or 2.
+  //  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
+  //  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
+    uint32_t q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
     x -= q * y; 
-    if (x >= y)             //  Now xf < 3 * yf < 2^22; need to reduce again.
+    if (x >= y)             //  Now x < 3 * y.
       x -= y, q += 1;
-    return q;               //  Now xf < 2 * yf, but unlikely that xf >= yf.
+    return q;               //  Now x < 2 * y, but unlikely that x >= y.
   }
   
   template
@@ -359,8 +373,8 @@ namespace  //  used only within this compilation unit.
         v2u += u2u * quasiQuoRem(v3u, u3u);
       }
       
-    bool swapped;
-    if (swapped = (v3u > u3u))
+    bool negateResult = (v3u > u3u);
+    if  (negateResult)
       {
         swap(u2u, v2u);
         swap(u3u, v3u);
@@ -368,24 +382,36 @@ namespace  //  used only within this compilation unit.
 
     //  u3u >= FLOAT_THRESHOLD > v3u.
     //  Transition to both u3u and v3u small, so values are cast into floats.
-    //  Althugh algorithm can tolerate a quasi-quotient here (perhaps one less than
-    //  the true quotient), the true quotient is faster than the quasi-quotient.
+    //  Although algorithm can tolerate a quasi-quotient here (perhaps one less than
+    //  the true quotient), the true quotient is about as fast as the quasi-quotient.
     float u3f, v3f;
-    u2u += v2u * quasiQuoRem(u3f, v3f, u3u, v3u);
-      
+    u2u += v2u * quasiQuoRem<CHECK_RCP>(u3f, v3f, u3u, v3u);
+     
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
     //  At this point v3f > u3f.
     //  The loop will stop when u3f <= 1.0.
     //  If u3f == 1.0, result is in u2u.
     //  If u3f == 0.0, then v3f == 1.0 and result is in v2u.
+    //  If u3f ==-1.0, result is in u2u.
     while (u3f > 1.0)
       {
         v2u += u2u * quasiQuoRem<CHECK_RCP>(v3f, u3f);
         u2u += v2u * quasiQuoRem<CHECK_RCP>(u3f, v3f);
       }
+    
+    //  If we don't check the reciprocal, u3f == -1.0f is possible,
+    //  in which case, the result will need to have the opposite sign from what it would
+    //  have if it were in u2u.
+    if (!CHECK_RCP)
+      negateResult ^= (u3f == -1.0f);
       
-    return  (u3f == 1.0)  ? (swapped) ?     u2u : u - u2u 
-           /*v3f == 1.0*/ : (swapped) ? u - v2u :     v2u;
+    negateResult ^= (v3f != 1.0f);  //  Update negateResult based on where the answer ended up.
+    
+    if (v3f != 1.0f)    //  Answer goes in v2u.
+      v2u = u2u;
+    if (negateResult)
+      v2u = u - v2u;
+    return v2u;
   }
 
   // Calculate u/v mod m, in the range [0,m-1]
