@@ -13,7 +13,7 @@
 */
 
 #include <gmp.h>
-#include <stdint.h>
+#include <cstdint>
 #include <stdexcept>
 #if defined(__CUDACC__) && defined(USE_COOP_GROUPS)
 #include <cooperative_groups.h>

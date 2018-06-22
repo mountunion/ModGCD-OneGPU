@@ -43,10 +43,6 @@ namespace  //  used only within this compilation unit.
   constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
   constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
 
-  constexpr int FLOAT_THRESHOLD_EXPT = 22; // So 2 ulp accuracy means error <= 0.5.  
-  constexpr uint32_t FLOAT_THRESHOLD = (1 << FLOAT_THRESHOLD_EXPT); // So 2 ulp accuracy means error <= 0.5.
-  
-
   typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
 
   //  This type is used to conveniently manipulate the modulus and its inverse.
@@ -275,70 +271,6 @@ namespace  //  used only within this compilation unit.
     return (x >= m.modulus/2) ? x - m.modulus : x;
   }
   
-  //  Computes an approximation for x / y, when x, y >= 2^21.
-  //  Approximation could be too small by 1 or 2.
-  //  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
-  //  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
-  __device__
-  inline
-  uint32_t
-  quasiQuo2(uint32_t x, uint32_t y)
-  { 
-    return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
-  }
-  
-  //  For the case 2^32 > x >= 2^22 > y > 0.
-  //  Using floating point division here is slightly faster than integer quotient 
-  //  and remainder.
-/*  __device__
-  inline
-  uint32_t
-  quoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
-  {
-    uint32_t q = x / y;
-    xf = __uint2float_rz(x % y);
-    yf = __uint2float_rz(y);
-    return q;
-  } */
-  
-  //  For the case 2^32 > x >= 2^22 > y > 0.
-  //  Using floating point division here is slightly faster than integer quotient 
-  //  and remainder.
-  template <bool CHECK_RCP>
-  __device__
-  inline
-  uint32_t
-  quasiQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
-  {
-    int i = __clz(y) - (32 - FLOAT_THRESHOLD_EXPT);
-    uint32_t q = quasiQuo2(x, y << i) << i;
-    xf = __uint2float_rz(x - q * y);
-    yf = __uint2float_rz(y);
-    return q + quasiQuoRem<CHECK_RCP>(xf, yf);  //might need slower alternative
-  }
-
-
-
-  //  Faster divide possible when x and y are close in size.
-  //  Precondition: 2^32 > x, y >= FLOAT_THRESHOLD, so 1 <= x / y < 2^(32 - FLOAT_THRESHOLD_EXPT).
-  //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
-  //  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
-  __device__
-  inline
-  uint32_t
-  quasiQuoRem(uint32_t& x, uint32_t y)
-  { 
-  //  Computes an approximation q for x / y, when x, y >= FLOAT_THRESHOLD.
-  //  q could be too small by 1 or 2.
-  //  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
-  //  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
-    uint32_t q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
-    x -= q * y; 
-    if (x >= y)             //  Now x < 3 * y.
-      x -= y, q += 1;
-    return q;               //  Now x < 2 * y, but unlikely that x >= y.
-  }
-  
   template
   <typename T>
   __device__
@@ -365,10 +297,10 @@ namespace  //  used only within this compilation unit.
     uint32_t v2u = 1, v3u = v;
     
     //  When u3 and v3 are both large enough, divide with floating point hardware.
-    while  (v3u >= FLOAT_THRESHOLD)
+    while  (v3u >= RCP_THRESHOLD)
       {
         u2u += v2u * quasiQuoRem(u3u, v3u);
-        if (u3u <  FLOAT_THRESHOLD)
+        if (u3u <  RCP_THRESHOLD)
           break;
         v2u += u2u * quasiQuoRem(v3u, u3u);
       }
@@ -380,7 +312,7 @@ namespace  //  used only within this compilation unit.
         swap(u3u, v3u);
       }
 
-    //  u3u >= FLOAT_THRESHOLD > v3u.
+    //  u3u >= RCP_THRESHOLD > v3u.
     //  Transition to both u3u and v3u small, so values are cast into floats.
     //  Although algorithm can tolerate a quasi-quotient here (perhaps one less than
     //  the true quotient), the true quotient is about as fast as the quasi-quotient.

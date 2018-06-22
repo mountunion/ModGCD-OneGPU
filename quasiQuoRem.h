@@ -7,6 +7,12 @@
 
 */
 
+#include <cstdint>
+
+constexpr int RCP_THRESHOLD_EXPT = 22;
+constexpr int RCP_THRESHOLD_CLZ  = 32 - RCP_THRESHOLD_EXPT;
+constexpr uint32_t RCP_THRESHOLD = 1 << RCP_THRESHOLD_EXPT;
+
 __device__
 inline
 float
@@ -45,4 +51,52 @@ quasiQuoRem(float& xf, float yf)
   if (CHECK_RCP && xf < 0.0f)
     xf += yf, qf -= 1.0f;
   return __float2uint_rz(qf);
+}
+  
+//  Computes an approximation for x / y, when x, y >= 2^21.
+//  Approximation could be too small by 1 or 2.
+//  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
+//  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
+__device__
+inline
+uint32_t
+quasiQuo2(uint32_t x, uint32_t y)
+{ 
+  return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
+}
+  
+//  For the case 2^32 > x >= 2^22 > y > 0.
+//  Using floating point division here is slightly faster than integer quotient 
+//  and remainder.
+template <bool CHECK_RCP>
+__device__
+inline
+uint32_t
+quasiQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
+{
+  int i = __clz(y) - RCP_THRESHOLD_CLZ;
+  uint32_t q = quasiQuo2(x, y << i) << i;
+  xf = __uint2float_rz(x - q * y);
+  yf = __uint2float_rz(y);
+  return q + quasiQuoRem<CHECK_RCP>(xf, yf);
+}
+
+//  Faster divide possible when x and y are close in size.
+//  Precondition: 2^32 > x, y >= RCP_THRESHOLD, so 1 <= x / y < 2^RCP_THRESHOLD_CLZ.
+//  Could produce a quotient that's too small by 1--but modInv can tolerate that.
+//  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
+__device__
+inline
+uint32_t
+quasiQuoRem(uint32_t& x, uint32_t y)
+{ 
+//  Computes an approximation q for x / y, when x, y >= RCP_THRESHOLD.
+//  q could be too small by 1 or 2.
+//  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
+//  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
+  uint32_t q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
+  x -= q * y; 
+  if (x >= y)             //  Now x < 3 * y.
+    x -= y, q += 1;
+  return q;               //  Now x < 2 * y, but unlikely that x >= y.
 }

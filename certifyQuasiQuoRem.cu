@@ -10,18 +10,24 @@
 
 #include <cuda_runtime.h>
 #include <cassert>
-#include <stdio.h>
-#include <stdint.h>
+#include <cstdio>
 #include "quasiQuoRem.h"
 
 __global__ void kernel(bool* fail)
 {
-  constexpr uint32_t LIMIT = 1 << 22;
-
-  for (uint32_t y = blockIdx.x * blockDim.x + threadIdx.x  + 1; y < LIMIT; y += blockDim.x * gridDim.x)
+  for (uint32_t y = blockIdx.x * blockDim.x + threadIdx.x  + 1; y < RCP_THRESHOLD; y += blockDim.x * gridDim.x)
     {
       float yf = __uint2float_rz(y);
-      for (uint32_t x = 1; x < 3*LIMIT; x += 1)
+      for (uint32_t x = 1; x < RCP_THRESHOLD; x += 1)
+        {
+          float xf = __uint2float_rz(x);
+          float qf = quasiQuoRem<false>(xf, yf);
+          if (xf >= -0.0f)
+            continue;
+          *fail = true;
+          printf("Failed for x == %u and y == %u: qf == %f, xf = %f\n", x, y, qf, xf);
+        }
+      for (uint32_t x = RCP_THRESHOLD; x < 3*RCP_THRESHOLD; x += 1)
         {
           float xf = __uint2float_rz(x);
           float qf = quasiQuoRem<false>(xf, yf);
@@ -29,7 +35,6 @@ __global__ void kernel(bool* fail)
             continue;
           *fail = true;
           printf("Failed for x == %u and y == %u: qf == %f, xf = %f\n", x, y, qf, xf);
-          //return;
         }
     }
 }
