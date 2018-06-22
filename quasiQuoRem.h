@@ -11,15 +11,15 @@ __device__
 inline
 float
 fastReciprocal(float yf)
-  {
-    float rf;
-    asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(rf) : "f"(yf));
-    return rf;
-  }
+{
+  float rf;
+  asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(rf) : "f"(yf));
+  return rf;
+}
 
 //  quasiQuoRem computes a quotient qf such that xf - qf * yf < 2 * yf.
 //  Precondition: xf and yf are truncated integers and 
-//  if RCP_NEEDS_CHECK == true,
+//  if CHECK_RCP == true,
 //  then 3*2^22 > xf >= 1.0 && 2^22 > yf >= 1.0
 //  else 2^22 > xf, yf >= 1.0.
 //  Note that __fdividef(x, y) is accurate to 2 ulp:
@@ -34,7 +34,7 @@ fastReciprocal(float yf)
 //  with 2 ulp <= 2 * 2^
 //  so trunc(qf) == 1, which
 //  is the exact value of the true quotient.
-template <bool RCP_NEEDS_CHECK>
+template <bool CHECK_RCP>
 __device__
 inline
 uint32_t
@@ -42,7 +42,7 @@ quasiQuoRem(float& xf, float yf)
 {
   float qf = truncf(__fmul_rz(xf, fastReciprocal(yf)));
   xf = __fmaf_rz(qf, -yf, xf); 
-  if (RCP_NEEDS_CHECK && xf < 0.0f)
+  if (CHECK_RCP && xf < 0.0f)
     xf += yf, qf -= 1.0f;
   return __float2uint_rz(qf);
 }

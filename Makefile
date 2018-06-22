@@ -68,7 +68,7 @@ testmodgcd-nogpu: testmodgcd.cpp GmpCuda.h
 certifyQuasiQuoRem: certifyQuasiQuoRem.o
 	$(LD) -Xcompiler -static-libstdc++ $(LDFLAGS) $^ -o $@
 
-certifyQuasiQuoRem.o: certifyQuasiQuoRem.cu
+certifyQuasiQuoRem.o: certifyQuasiQuoRem.cu quasiQuoRem.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $<
 
 testmodgcd.o: testmodgcd.cpp GmpCuda.h
@@ -83,10 +83,10 @@ GmpCudaDevice.o: GmpCudaDevice.cu GmpCuda.h
 GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -c $<
 
-GmpCudaDevice-gcdKernel.o: GmpCudaDevice-gcdKernel.cu GmpCudaDevice-gcdDevicesRcpNoCheck.h GmpCuda.h
+GmpCudaDevice-gcdKernel.o: GmpCudaDevice-gcdKernel.cu GmpCudaDevice-gcdDevicesRcpNoCheck.h quasiQuoRem.h GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $<
 
-GmpCudaDevice-gcdKernel-coop-gps.o: GmpCudaDevice-gcdKernel.cu GmpCudaDevice-gcdDevicesRcpNoCheck.h GmpCuda.h
+GmpCudaDevice-gcdKernel-coop-gps.o: GmpCudaDevice-gcdKernel.cu GmpCudaDevice-gcdDevicesRcpNoCheck.h quasiQuoRem.h GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -DUSE_COOP_GROUPS $(GCD_KERN_FLAGS) -c $< -o $@
 
 createModuli: createModuli.cpp GmpCuda.h
