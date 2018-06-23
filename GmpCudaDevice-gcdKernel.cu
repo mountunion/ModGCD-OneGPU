@@ -34,6 +34,12 @@
 #include <cuda_runtime.h>
 #include "GmpCuda.h"
 
+//  Include the fastReciprocal and quasiQuoRem inline functions,
+//  which are in a separate headr file so that quasiQuoRem<false> can be certified
+//  for use on specific devices.
+#include "quasiQuoRem.h"
+#include "GmpCudaDevice-gcdDevicesRcpNoCheck.h"
+
 using namespace GmpCuda;
 
 namespace  //  used only within this compilation unit.
@@ -42,16 +48,19 @@ namespace  //  used only within this compilation unit.
   constexpr unsigned FULL_MASK    = 0xFFFFFFFF;           //  Used in sync functions.
   constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
   constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
+#if defined(__CUDA_ARCH__)  && __CUDA__ARCH__ >= 700
+  constexpr bool MOD_INV_LARGE_USE_RCP      = true;
+  constexpr bool MOD_INV_TRANSITION_USE_RCP = false;
+#else
+  constexpr bool MOD_INV_LARGE_USE_RCP      = true;
+  constexpr bool MOD_INV_TRANSITION_USE_RCP = true;
+#endif
+
   typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
 
   //  This type is used to conveniently manipulate the modulus and its inverse.
   typedef struct {uint32_t modulus; uint64_t inverse;} modulus_t;
   
-//  Include the fastReciprocal and quasiQuoRem inline functions,
-//  which are in a separate headr file so that quasiQuoRem<false> can be certified
-//  for use on specific devices.
-#include "quasiQuoRem.h"
-#include "GmpCudaDevice-gcdDevicesRcpNoCheck.h"
 
   //  Which thread in the warp satisfying the predicate has a nonzero value?
   //  Uses ballot so that every multiprocessor (deterministically) chooses the same pair.
@@ -283,7 +292,7 @@ namespace  //  used only within this compilation unit.
   }
 
   //  Return 1/v (mod u), assuming gcd(u,v) == 1.
-  //  Assumes u > v.
+  //  Assumes u > v > 0.
   //  Uses the extended Euclidean algorithm:
   //  see Knuth, The Art of Computer Programming, vol. 2, 3/e,
   //  Algorithm X on pp342-3.
@@ -298,10 +307,10 @@ namespace  //  used only within this compilation unit.
     //  When u3 and v3 are both large enough, divide with floating point hardware.
     while  (v3u >= RCP_THRESHOLD)
       {
-        u2u += v2u * quasiQuoRem(u3u, v3u);
+        u2u += v2u * quasiQuoRem<MOD_INV_LARGE_USE_RCP>(u3u, v3u);
         if (u3u <  RCP_THRESHOLD)
           break;
-        v2u += u2u * quasiQuoRem(v3u, u3u);
+        v2u += u2u * quasiQuoRem<MOD_INV_LARGE_USE_RCP>(v3u, u3u);
       }
       
     bool negateResult = (v3u > u3u);
@@ -316,7 +325,7 @@ namespace  //  used only within this compilation unit.
     //  Although algorithm can tolerate a quasi-quotient here (perhaps one less than
     //  the true quotient), the true quotient is about as fast as the quasi-quotient.
     float u3f, v3f;
-    u2u += v2u * quasiQuoRem<CHECK_RCP>(u3f, v3f, u3u, v3u);
+    u2u += v2u * quasiQuoRem<CHECK_RCP, MOD_INV_TRANSITION_USE_RCP>(u3f, v3f, u3u, v3u);
      
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
     //  At this point v3f > u3f.
@@ -333,12 +342,12 @@ namespace  //  used only within this compilation unit.
     //  If we don't check the reciprocal, u3f == -1.0f is possible,
     //  in which case, the result will need to have the opposite sign from what it would
     //  have if it were in u2u.
-    if (!CHECK_RCP && QUASI_QUO_TRANS_USES_RCP)
+    if (MOD_INV_TRANSITION_USE_RCP && !CHECK_RCP)
       negateResult ^= (u3f == -1.0f);
       
     negateResult ^= (v3f != 1.0f);  //  Update negateResult based on where the answer ended up.
     
-    if (v3f != 1.0f)    //  Answer goes in v2u.
+    if (v3f != 1.0f)    //  Answer in u2--goes in v2u.
       v2u = u2u;
     if (negateResult)
       v2u = u - v2u;
