@@ -12,6 +12,12 @@
 constexpr int RCP_THRESHOLD_EXPT = 22;
 constexpr int RCP_THRESHOLD_CLZ  = 32 - RCP_THRESHOLD_EXPT;
 constexpr uint32_t RCP_THRESHOLD = 1 << RCP_THRESHOLD_EXPT;
+#if defined(__CUDA_ARCH__)  && __CUDA__ARCH__ >= 700
+constexpr bool QUASI_QUO_TRANS_USES_RCP = false;
+#else
+constexpr bool QUASI_QUO_TRANS_USES_RCP = true;
+#endif
+
 
 __device__
 inline
@@ -74,11 +80,21 @@ inline
 uint32_t
 quasiQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
 {
-  int i = __clz(y) - RCP_THRESHOLD_CLZ;
-  uint32_t q = quasiQuo2(x, y << i) << i;
-  xf = __uint2float_rz(x - q * y);
+  uint32_t q;
   yf = __uint2float_rz(y);
-  return q + quasiQuoRem<CHECK_RCP>(xf, yf);
+  if (QUASI_QUO_TRANS_USES_RCP)
+    {
+      int i = __clz(y) - RCP_THRESHOLD_CLZ;
+      q = quasiQuo2(x, y << i) << i;
+      xf = __uint2float_rz(x - q * y);
+      q += quasiQuoRem<CHECK_RCP>(xf, yf);
+    }
+  else
+    {
+      q = x / y;
+      xf = __uint2float_rz(x - q * y);
+    }
+  return q;
 }
 
 //  Faster divide possible when x and y are close in size.

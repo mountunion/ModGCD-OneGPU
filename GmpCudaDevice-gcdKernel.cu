@@ -42,7 +42,6 @@ namespace  //  used only within this compilation unit.
   constexpr unsigned FULL_MASK    = 0xFFFFFFFF;           //  Used in sync functions.
   constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
   constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
-
   typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
 
   //  This type is used to conveniently manipulate the modulus and its inverse.
@@ -334,7 +333,7 @@ namespace  //  used only within this compilation unit.
     //  If we don't check the reciprocal, u3f == -1.0f is possible,
     //  in which case, the result will need to have the opposite sign from what it would
     //  have if it were in u2u.
-    if (!CHECK_RCP)
+    if (!CHECK_RCP && QUASI_QUO_TRANS_USES_RCP)
       negateResult ^= (u3f == -1.0f);
       
     negateResult ^= (v3f != 1.0f);  //  Update negateResult based on where the answer ended up.
