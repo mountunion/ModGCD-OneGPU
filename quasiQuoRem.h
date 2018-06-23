@@ -68,14 +68,14 @@ quasiQuo2(uint32_t x, uint32_t y)
 //  For the case 2^32 > x >= 2^22 > y > 0.
 //  Using floating point division here is slightly faster than integer quotient 
 //  and remainder for many architectures, but not all.
-template <bool CHECK_RCP, bool USE_RCP>
+template <bool CHECK_RCP, bool QUASI>
 __device__
 inline
 uint32_t
-quasiQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
+quoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
 {
   uint32_t q;
-  if (USE_RCP)
+  if (QUASI)
     {
       int i = __clz(y) - RCP_THRESHOLD_CLZ;
       q = quasiQuo2(x, y << i) << i;
@@ -84,7 +84,7 @@ quasiQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t
     q = x / y;
   xf = __uint2float_rz(x - q * y);
   yf = __uint2float_rz(y);
-  if (USE_RCP)
+  if (QUASI)
     q += quasiQuoRem<CHECK_RCP>(xf, yf);
   return q;
 }
@@ -93,7 +93,6 @@ quasiQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t
 //  Precondition: 2^32 > x, y >= RCP_THRESHOLD, so 1 <= x / y < 2^RCP_THRESHOLD_CLZ.
 //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
 //  ***********THIS STILL NEEDS TO BE CHECKED MATHEMATICALLY***********
-template <bool USE_RCP>
 __device__
 inline
 uint32_t
@@ -103,13 +102,9 @@ quasiQuoRem(uint32_t& x, uint32_t y)
 //  q could be too small by 1 or 2.
 //  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
 //  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
-  uint32_t q;
-  if (USE_RCP)
-    q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
-  else 
-    q = x / y;
+  uint32_t q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
   x -= q * y; 
-  if (USE_RCP && x >= y)  //  Now x < 3 * y.
+  if (x >= y)  //  Now x < 3 * y.
     x -= y, q += 1;
   return q;               //  Now x < 2 * y, but unlikely that x >= y.
 }

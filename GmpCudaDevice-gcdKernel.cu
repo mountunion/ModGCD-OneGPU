@@ -48,13 +48,6 @@ namespace  //  used only within this compilation unit.
   constexpr unsigned FULL_MASK    = 0xFFFFFFFF;           //  Used in sync functions.
   constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
   constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
-#if defined(__CUDA_ARCH__)  && __CUDA__ARCH__ >= 700
-  constexpr bool MOD_INV_LARGE_USE_RCP      = true;
-  constexpr bool MOD_INV_TRANSITION_USE_RCP = false;
-#else
-  constexpr bool MOD_INV_LARGE_USE_RCP      = true;
-  constexpr bool MOD_INV_TRANSITION_USE_RCP = true;
-#endif
 
   typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
 
@@ -301,31 +294,39 @@ namespace  //  used only within this compilation unit.
   uint32_t
   modInv(uint32_t u, uint32_t v)
   {
-    uint32_t u2u = 0, u3u = u;
-    uint32_t v2u = 1, v3u = v;
+    constexpr bool QUASI = 
+#if defined(__CUDA_ARCH__)
+      (__CUDA_ARCH__ != 700);
+#else
+      true;  //  Should never get here in actual device code, but needs to be compilable for other phases.
+#endif
+    
+    uint32_t u2 = 0, u3 = u;
+    uint32_t v2 = 1, v3 = v;
     
     //  When u3 and v3 are both large enough, divide with floating point hardware.
-    while  (v3u >= RCP_THRESHOLD)
+    while  (v3 >= RCP_THRESHOLD)
       {
-        u2u += v2u * quasiQuoRem<MOD_INV_LARGE_USE_RCP>(u3u, v3u);
-        if (u3u <  RCP_THRESHOLD)
+        u2 += v2 * quasiQuoRem(u3, v3);
+        if (u3 <  RCP_THRESHOLD)
           break;
-        v2u += u2u * quasiQuoRem<MOD_INV_LARGE_USE_RCP>(v3u, u3u);
+        v2 += u2 * quasiQuoRem(v3, u3);
       }
       
-    bool negateResult = (v3u > u3u);
+    bool negateResult = (v3 > u3);
     if  (negateResult)
       {
-        swap(u2u, v2u);
-        swap(u3u, v3u);
+        swap(u2, v2);
+        swap(u3, v3);
       }
 
     //  u3u >= RCP_THRESHOLD > v3u.
     //  Transition to both u3u and v3u small, so values are cast into floats.
     //  Although algorithm can tolerate a quasi-quotient here (perhaps one less than
-    //  the true quotient), the true quotient is about as fast as the quasi-quotient.
+    //  the true quotient), the true quotient is about as fast as the quasi-quotient,
+    //  so we decide which version to use when the compiler compiles to a specific architecture.
     float u3f, v3f;
-    u2u += v2u * quasiQuoRem<CHECK_RCP, MOD_INV_TRANSITION_USE_RCP>(u3f, v3f, u3u, v3u);
+    u2 += v2 * quoRem<CHECK_RCP, QUASI>(u3f, v3f, u3, v3);
      
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
     //  At this point v3f > u3f.
@@ -335,23 +336,23 @@ namespace  //  used only within this compilation unit.
     //  If u3f ==-1.0, result is in u2u.
     while (u3f > 1.0)
       {
-        v2u += u2u * quasiQuoRem<CHECK_RCP>(v3f, u3f);
-        u2u += v2u * quasiQuoRem<CHECK_RCP>(u3f, v3f);
+        v2 += u2 * quasiQuoRem<CHECK_RCP>(v3f, u3f);
+        u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, v3f);
       }
     
     //  If we don't check the reciprocal, u3f == -1.0f is possible,
     //  in which case, the result will need to have the opposite sign from what it would
     //  have if it were in u2u.
-    if (MOD_INV_TRANSITION_USE_RCP && !CHECK_RCP)
+    if (QUASI && !CHECK_RCP)
       negateResult ^= (u3f == -1.0f);
       
     negateResult ^= (v3f != 1.0f);  //  Update negateResult based on where the answer ended up.
     
-    if (v3f != 1.0f)    //  Answer in u2--goes in v2u.
-      v2u = u2u;
+    if (v3f != 1.0f)                //  Answer in u2--goes in v2.
+      v2 = u2;
     if (negateResult)
-      v2u = u - v2u;
-    return v2u;
+      v2 = u - v2;
+    return v2;
   }
 
   // Calculate u/v mod m, in the range [0,m-1]
