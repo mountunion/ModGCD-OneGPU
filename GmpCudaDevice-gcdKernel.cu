@@ -34,12 +34,6 @@
 #include <cuda_runtime.h>
 #include "GmpCuda.h"
 
-//  Include the fastReciprocal and quasiQuoRem inline functions,
-//  which are in a separate headr file so that quasiQuoRem<false> can be certified
-//  for use on specific devices.
-#include "quasiQuoRem.h"
-#include "GmpCudaDevice-gcdDevicesRcpNoCheck.h"
-
 using namespace GmpCuda;
 
 namespace  //  used only within this compilation unit.
@@ -49,6 +43,18 @@ namespace  //  used only within this compilation unit.
   constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
   constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
 
+  //  Include the devicesRcpNoCheck definition, which is generated
+  //  by a configuration script.
+#include "GmpCudaDevice-gcdDevicesRcpNoCheck.h"
+
+  //  Include the fastReciprocal and quasiQuoRem inline functions,
+  //  which are in a separate header file so that quasiQuoRem<false> can be certified
+  //  for use on specific devices.
+#include "quasiQuoRem.h"
+
+  constexpr int RCP_THRESHOLD_CLZ  = 32 - RCP_THRESHOLD_EXPT;
+  constexpr uint32_t RCP_THRESHOLD = 1 << RCP_THRESHOLD_EXPT;
+  
   typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
 
   //  This type is used to conveniently manipulate the modulus and its inverse.
@@ -284,6 +290,62 @@ namespace  //  used only within this compilation unit.
     y = tmp;
   }
 
+  
+  //  Computes an approximation for x / y, when x, y >= 2^21.
+  //  Approximation could be too small by 1 or 2.
+  //  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
+  //  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
+  __device__
+  inline
+  uint32_t
+  quasiQuo2(uint32_t x, uint32_t y)
+  { 
+    return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
+  }
+    
+  //  For the case 2^32 > x >= 2^22 > y > 0.
+  //  Using floating point division here is slightly faster than integer quotient 
+  //  and remainder for many architectures, but not all.
+  template <bool QUASI, bool CHECK_RCP>
+  __device__
+  inline
+  uint32_t
+  quoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
+  {
+    uint32_t q;
+    if (QUASI)
+      {
+        int i = __clz(y) - RCP_THRESHOLD_CLZ;
+        q = quasiQuo2(x, y << i) << i;
+      }
+    else
+      q = x / y;
+    xf = __uint2float_rz(x - q * y);
+    yf = __uint2float_rz(y);
+    if (QUASI)
+      q += quasiQuoRem<CHECK_RCP>(xf, yf);
+    return q;
+  }
+
+  //  Faster divide possible when x and y are close in size.
+  //  Precondition: 2^32 > x, y >= RCP_THRESHOLD, so 1 <= x / y < 2^RCP_THRESHOLD_CLZ.
+  //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
+  __device__
+  inline
+  uint32_t
+  quasiQuoRem(uint32_t& x, uint32_t y)
+  { 
+  //  Computes an approximation q for x / y, when x, y >= RCP_THRESHOLD.
+  //  q could be too small by 1 or 2.
+  //  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
+  //  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
+    uint32_t q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
+    x -= q * y; 
+    if (x >= y)  //  Now x < 3 * y.
+      x -= y, q += 1;
+    return q;               //  Now x < 2 * y, but unlikely that x >= y.
+  }
+
   //  Return 1/v (mod u), assuming gcd(u,v) == 1.
   //  Assumes u > v > 0.
   //  Uses the extended Euclidean algorithm:
@@ -298,7 +360,7 @@ namespace  //  used only within this compilation unit.
 #if defined(__CUDA_ARCH__)
       (__CUDA_ARCH__ != 700);
 #else
-      true;  //  Should never get here in actual device code, but needs to be compilable for other phases.
+      false;  //  Needs to be legal C++ for host phase cmpilation.
 #endif
     
     uint32_t u2 = 0, u3 = u;
@@ -320,20 +382,20 @@ namespace  //  used only within this compilation unit.
         swap(u3, v3);
       }
 
-    //  u3u >= RCP_THRESHOLD > v3u.
-    //  Transition to both u3u and v3u small, so values are cast into floats.
-    //  Although algorithm can tolerate a quasi-quotient here (perhaps one less than
+    //  u3 >= RCP_THRESHOLD > v3.
+    //  Transition to both u3 and v3 small, so values are cast into floats.
+    //  Although algorithm can tolerate a quasi-quotient here (i.e., possibly one less than
     //  the true quotient), the true quotient is about as fast as the quasi-quotient,
     //  so we decide which version to use when the compiler compiles to a specific architecture.
     float u3f, v3f;
-    u2 += v2 * quoRem<CHECK_RCP, QUASI>(u3f, v3f, u3, v3);
+    u2 += v2 * quoRem<QUASI, CHECK_RCP>(u3f, v3f, u3, v3);
      
     //  When u3 and v3 are both small enough, divide with floating point hardware.   
     //  At this point v3f > u3f.
     //  The loop will stop when u3f <= 1.0.
-    //  If u3f == 1.0, result is in u2u.
-    //  If u3f == 0.0, then v3f == 1.0 and result is in v2u.
-    //  If u3f ==-1.0, result is in u2u.
+    //  If u3f == 1.0, result is in u2.
+    //  If u3f == 0.0, then v3f == 1.0 and result is in v2.
+    //  If u3f ==-1.0, result is in u2.
     while (u3f > 1.0)
       {
         v2 += u2 * quasiQuoRem<CHECK_RCP>(v3f, u3f);
@@ -348,7 +410,7 @@ namespace  //  used only within this compilation unit.
       
     negateResult ^= (v3f != 1.0f);  //  Update negateResult based on where the answer ended up.
     
-    if (v3f != 1.0f)                //  Answer in u2--goes in v2.
+    if (v3f != 1.0f)                //  Answer in u2--copy into v2.
       v2 = u2;
     if (negateResult)
       v2 = u - v2;

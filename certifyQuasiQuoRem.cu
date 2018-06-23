@@ -11,10 +11,13 @@
 #include <cuda_runtime.h>
 #include <cassert>
 #include <cstdio>
+#include <cstdint>
 #include "quasiQuoRem.h"
 
 __global__ void kernel(bool* fail)
 {
+  constexpr uint32_t RCP_THRESHOLD = 1 << RCP_THRESHOLD_EXPT;
+
   for (uint32_t y = blockIdx.x * blockDim.x + threadIdx.x  + 1; y < RCP_THRESHOLD; y += blockDim.x * gridDim.x)
     {
       float yf = __uint2float_rz(y);
@@ -27,7 +30,7 @@ __global__ void kernel(bool* fail)
           *fail = true;
           printf("Failed for x == %u and y == %u: qf == %f, xf = %f\n", x, y, qf, xf);
         }
-      for (uint32_t x = RCP_THRESHOLD; x < 3*RCP_THRESHOLD; x += 1)
+      for (uint32_t x = RCP_THRESHOLD; x < 3 * RCP_THRESHOLD; x += 1)
         {
           float xf = __uint2float_rz(x);
           float qf = quasiQuoRem<false>(xf, yf);
@@ -38,7 +41,6 @@ __global__ void kernel(bool* fail)
         }
     }
 }
-
 
 int main(void)
 {
