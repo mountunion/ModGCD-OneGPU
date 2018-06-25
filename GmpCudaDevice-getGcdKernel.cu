@@ -1,4 +1,5 @@
-/*  GmpCudaDevice-gcd.cu -- provides GmpCudaDevice::gcd method.
+/*  GmpCudaDevice-getGcdKernel.cu -- provides GmpCudaDevice::getGcdKernel method
+                                     (includes the gcd kernel code).
 
   Implementation of the modular integer gcd algorithm using L <= 32 bit moduli.
   
@@ -490,7 +491,7 @@ getModulus(uint32_t* moduliList)
     return {m, uint64_t{1} + (q << L) + (r << L) / D};
 }
 
-//  Device kernel for the GmpCudaDevice::gcd method.
+//  Device kernel for the GmpCudaDevice::getGcdKernel method.
 template <bool CHECK_RCP>
 __global__
 static
