@@ -47,13 +47,13 @@ static:
 	$(MAKE) clean
 	$(MAKE) GMPL=-l:libgmp.a LDFLAGS="-Xcompiler -static-libstdc++ $(LDFLAGS)"
 
-testmodgcd: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
+testmodgcd: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-getGcdKernel.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
 
 ##
 ##  This target uses cooperative groups for inter-SM synchronization.
 ##
-testmodgcd-coop-gps: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-gcdKernel-coop-gps.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
+testmodgcd-coop-gps: testmodgcd.o GmpCudaDevice-gcd.o GmpCudaDevice-getGcdKernel-coop-gps.o GmpCudaDevice.o GmpCudaBarrier.o GmpCudaModuli.o
 	$(LD) $(LDFLAGS) $^ -o $@ $(GMPL)
 
 ##
@@ -83,10 +83,10 @@ GmpCudaDevice.o: GmpCudaDevice.cu GmpCuda.h
 GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -c $<
 
-GmpCudaDevice-gcdKernel.o: GmpCudaDevice-gcdKernel.cu GmpCudaDevice-gcdDevicesRcpNoCheck.h quasiQuoRem.h GmpCuda.h
+GmpCudaDevice-getGcdKernel.o: GmpCudaDevice-getGcdKernel.cu GmpCudaDevice-gcdDevicesRcpNoCheck.h quasiQuoRem.h GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $<
 
-GmpCudaDevice-gcdKernel-coop-gps.o: GmpCudaDevice-gcdKernel.cu GmpCudaDevice-gcdDevicesRcpNoCheck.h quasiQuoRem.h GmpCuda.h
+GmpCudaDevice-getGcdKernel-coop-gps.o: GmpCudaDevice-getGcdKernel.cu GmpCudaDevice-gcdDevicesRcpNoCheck.h quasiQuoRem.h GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -DUSE_COOP_GROUPS $(GCD_KERN_FLAGS) -c $< -o $@
 
 createModuli: createModuli.cpp GmpCuda.h
