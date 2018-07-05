@@ -360,7 +360,7 @@ namespace  //  used only within this compilation unit.
 #if defined(__CUDA_ARCH__)
       (__CUDA_ARCH__ != 700);
 #else
-      false;  //  Needs to be legal C++ for host phase cmpilation.
+      false;  //  Needs to be legal C++ for host phase compilation.
 #endif
     
     uint32_t u2 = 0, u3 = u;
@@ -396,7 +396,7 @@ namespace  //  used only within this compilation unit.
     //  If u3f == 1.0, result is in u2.
     //  If u3f == 0.0, then v3f == 1.0 and result is in v2.
     //  If u3f ==-1.0, result is in u2.
-    while (u3f > 1.0)
+    while (u3f > 1.0f)
       {
         v2 += u2 * quasiQuoRem<CHECK_RCP>(v3f, u3f);
         u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, v3f);
