@@ -53,6 +53,13 @@ constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modu
 constexpr int RCP_THRESHOLD_CLZ  = 32 - RCP_THRESHOLD_EXPT;
 constexpr uint32_t RCP_THRESHOLD = 1 << RCP_THRESHOLD_EXPT;
 
+constexpr bool USE_QUASI = 
+#if defined(__CUDA_ARCH__)
+    (__CUDA_ARCH__ != 700);
+#else
+    false;  //  Needs to be legal C++ for host phase compilation.
+#endif
+  
 typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
 
 //  This type is used to conveniently manipulate the modulus and its inverse.
@@ -371,13 +378,6 @@ static
 uint32_t
 modInv(uint32_t u, uint32_t v)
 {
-  constexpr bool QUASI = 
-#if defined(__CUDA_ARCH__)
-    (__CUDA_ARCH__ != 700);
-#else
-    false;  //  Needs to be legal C++ for host phase compilation.
-#endif
-  
   uint32_t u2 = 0, u3 = u;
   uint32_t v2 = 1, v3 = v;
   
@@ -403,7 +403,7 @@ modInv(uint32_t u, uint32_t v)
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
   //  so we decide which version to use when the compiler compiles to a specific architecture.
   float u3f, v3f;
-  u2 += v2 * quoRem<QUASI, CHECK_RCP>(u3f, v3f, u3, v3);
+  u2 += v2 * quoRem<USE_QUASI, CHECK_RCP>(u3f, v3f, u3, v3);
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
@@ -420,7 +420,7 @@ modInv(uint32_t u, uint32_t v)
   //  If we don't check the reciprocal, u3f == -1.0f is possible,
   //  in which case, the result will need to have the opposite sign from what it would
   //  have if it were in u2u.
-  if (QUASI && !CHECK_RCP)
+  if (USE_QUASI && !CHECK_RCP)
     negateResult ^= (u3f == -1.0f);
     
   negateResult ^= (v3f != 1.0f);  //  Update negateResult based on where the answer ended up.
