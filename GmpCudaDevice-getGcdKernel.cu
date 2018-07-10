@@ -321,37 +321,18 @@ quasiQuo(uint32_t x, uint32_t y)
 { 
   return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
 }
-  
-//  For the case 2^32 > x >= 2^22 > y > 0.
-//  Using floating point division here is slightly faster than integer quotient 
-//  and remainder for many architectures, but not all.
-template <bool CHECK_RCP>
+
 __device__
 static
 inline
 uint32_t
-quasiQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
+quasiQuoNorm(uint32_t x, uint32_t y)
 {
   int i = __clz(y) - RCP_THRESHOLD_CLZ;
-  uint32_t q = quasiQuo(x, y << i) << i;
-  xf = __uint2float_rz(x - q * y);
-  yf = __uint2float_rz(y);
-  q += quasiQuoRem<CHECK_RCP>(xf, yf);
-  return q;
+  return quasiQuo(x, y << i) << i;
 }
 
-__device__
-static
-inline
-uint32_t
-quoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
-{
-  uint32_t q = x / y;
-  xf = __uint2float_rz(x - q * y);
-  yf = __uint2float_rz(y);
-  return q;
-}
-
+  
 //  Faster divide possible when x and y are close in size.
 //  Precondition: 2^32 > x, y >= RCP_THRESHOLD, so 1 <= x / y < 2^RCP_THRESHOLD_CLZ.
 //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
@@ -410,16 +391,12 @@ modInv(uint32_t u, uint32_t v)
   //  Although algorithm can tolerate a quasi-quotient here (i.e., possibly one less than
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
   //  so we decide which version to use when the compiler compiles to a specific architecture.
-  float u3f, v3f;
-  uint32_t q; 
-  if (QUASI_TRANSITION) 
-    {
-      q = quasiQuoRem<CHECK_RCP>(u3f, v3f, u3, v3);
-    }
-  else
-    {
-      q = quoRem                (u3f, v3f, u3, v3);
-    }
+  uint32_t q = (QUASI_TRANSITION) ? quasiQuoNorm(u3, v3) : u3 / v3;
+  u3 -= q * v3;
+  float u3f = __uint2float_rz(u3);
+  float v3f = __uint2float_rz(v3);
+  if (QUASI_TRANSITION)
+    q += quasiQuoRem<CHECK_RCP>(u3f, v3f);
   u2 += v2 * q;
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
