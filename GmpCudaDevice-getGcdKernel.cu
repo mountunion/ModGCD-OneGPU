@@ -50,15 +50,17 @@ constexpr unsigned FULL_MASK    = 0xFFFFFFFF;           //  Used in sync functio
 constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
 constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
 
-constexpr int RCP_THRESHOLD_CLZ  = 32 - RCP_THRESHOLD_EXPT;
+constexpr int RCP_THRESHOLD_NORM_CLZ  = 32 - RCP_THRESHOLD_EXPT;  //  # leading zeros in a normalized denominator.
 constexpr uint32_t RCP_THRESHOLD = 1 << RCP_THRESHOLD_EXPT;
 
+//  Make the cuda architecture number available as a constexpr for all compilation phases.
 constexpr int CUDA_ARCH =
-#if defined(__CUDA_ARCH__)
-    __CUDA_ARCH__;
+#ifdef __CUDA_ARCH__
+  __CUDA_ARCH__
 #else
-    -1;  //  Needs to be legal C++ for host phase compilation.
+  -1
 #endif
+  ;
   
 typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
 
@@ -322,19 +324,23 @@ quasiQuo(uint32_t x, uint32_t y)
   return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
 }
 
+//  Assumes x >= RCP_THRESHOLD > y. (Recall that RCP_THRESHOLD == 2^RCP_THRESHOLD_EXPT.)
+//  First computes i such that 2^RCP_THRESHOLD_EXPT > y * 2^i >= 2^(RCP_THRESHOLD_EXPT - 1.
+//  Returns q = 2^i * q' such that x - q' * y * 2^i < 2 * y * 2^i,
+//  i.e., x - q * y < y * 2^(i + 1) < 2*RCP_THRESHOLD.
 __device__
 static
 inline
 uint32_t
 quasiQuoNorm(uint32_t x, uint32_t y)
 {
-  int i = __clz(y) - RCP_THRESHOLD_CLZ;
+  int i = __clz(y) - RCP_THRESHOLD_NORM_CLZ;
   return quasiQuo(x, y << i) << i;
 }
 
   
 //  Faster divide possible when x and y are close in size.
-//  Precondition: 2^32 > x, y >= RCP_THRESHOLD, so 1 <= x / y < 2^RCP_THRESHOLD_CLZ.
+//  Precondition: 2^32 > x, y >= 2^RCP_THRESHOLD_EXPT, so 0 <= x / y < 2^RCP_THRESHOLD_NORM_CLZ.
 //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
 __device__
 static
