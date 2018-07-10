@@ -53,11 +53,11 @@ constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modu
 constexpr int RCP_THRESHOLD_CLZ  = 32 - RCP_THRESHOLD_EXPT;
 constexpr uint32_t RCP_THRESHOLD = 1 << RCP_THRESHOLD_EXPT;
 
-constexpr bool USE_QUASI = 
+constexpr int CUDA_ARCH =
 #if defined(__CUDA_ARCH__)
-    (__CUDA_ARCH__ != 700);
+    __CUDA_ARCH__;
 #else
-    false;  //  Needs to be legal C++ for host phase compilation.
+    -1;  //  Needs to be legal C++ for host phase compilation.
 #endif
   
 typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
@@ -317,7 +317,7 @@ __device__
 static
 inline
 uint32_t
-quasiQuo2(uint32_t x, uint32_t y)
+quasiQuo(uint32_t x, uint32_t y)
 { 
   return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
 }
@@ -325,25 +325,30 @@ quasiQuo2(uint32_t x, uint32_t y)
 //  For the case 2^32 > x >= 2^22 > y > 0.
 //  Using floating point division here is slightly faster than integer quotient 
 //  and remainder for many architectures, but not all.
-template <bool QUASI, bool CHECK_RCP>
+template <bool CHECK_RCP>
+__device__
+static
+inline
+uint32_t
+quasiQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
+{
+  int i = __clz(y) - RCP_THRESHOLD_CLZ;
+  uint32_t q = quasiQuo(x, y << i) << i;
+  xf = __uint2float_rz(x - q * y);
+  yf = __uint2float_rz(y);
+  q += quasiQuoRem<CHECK_RCP>(xf, yf);
+  return q;
+}
+
 __device__
 static
 inline
 uint32_t
 quoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
 {
-  uint32_t q;
-  if (QUASI)
-    {
-      int i = __clz(y) - RCP_THRESHOLD_CLZ;
-      q = quasiQuo2(x, y << i) << i;
-    }
-  else
-    q = x / y;
+  uint32_t q = x / y;
   xf = __uint2float_rz(x - q * y);
   yf = __uint2float_rz(y);
-  if (QUASI)
-    q += quasiQuoRem<CHECK_RCP>(xf, yf);
   return q;
 }
 
@@ -360,7 +365,8 @@ quasiQuoRem(uint32_t& x, uint32_t y)
 //  q could be too small by 1 or 2.
 //  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
 //  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
-  uint32_t q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
+//  uint32_t q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
+  uint32_t q = quasiQuo(x, y);
   x -= q * y; 
   if (x >= y)  //  Now x < 3 * y.
     x -= y, q += 1;
@@ -378,6 +384,8 @@ static
 uint32_t
 modInv(uint32_t u, uint32_t v)
 {
+  constexpr bool QUASI_TRANSITION = (CUDA_ARCH != 700);
+  
   uint32_t u2 = 0, u3 = u;
   uint32_t v2 = 1, v3 = v;
   
@@ -403,7 +411,16 @@ modInv(uint32_t u, uint32_t v)
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
   //  so we decide which version to use when the compiler compiles to a specific architecture.
   float u3f, v3f;
-  u2 += v2 * quoRem<USE_QUASI, CHECK_RCP>(u3f, v3f, u3, v3);
+  uint32_t q; 
+  if (QUASI_TRANSITION) 
+    {
+      q = quasiQuoRem<CHECK_RCP>(u3f, v3f, u3, v3);
+    }
+  else
+    {
+      q = quoRem                (u3f, v3f, u3, v3);
+    }
+  u2 += v2 * q;
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
@@ -420,7 +437,7 @@ modInv(uint32_t u, uint32_t v)
   //  If we don't check the reciprocal, u3f == -1.0f is possible,
   //  in which case, the result will need to have the opposite sign from what it would
   //  have if it were in u2u.
-  if (USE_QUASI && !CHECK_RCP)
+  if (QUASI_TRANSITION && !CHECK_RCP)
     negateResult ^= (u3f == -1.0f);
     
   negateResult ^= (v3f != 1.0f);  //  Update negateResult based on where the answer ended up.
