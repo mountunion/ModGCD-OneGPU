@@ -398,15 +398,22 @@ modInv(uint32_t u, uint32_t v)
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
   //  so we decide which version to use when the compiler compiles to a specific architecture.
   float u3f, v3f;
-  {
-    uint32_t q = (QUASI_TRANSITION) ? quasiQuoNorm(u3, v3) : u3 / v3;
-    u3 -= q * v3;
-    u3f = __uint2float_rz(u3);
-    v3f = __uint2float_rz(v3);
-    if (QUASI_TRANSITION)
+  if (QUASI_TRANSITION)
+    {
+      uint32_t q = quasiQuoNorm(u3, v3);
+      u3 -= q * v3;
+      u3f = __uint2float_rz(u3);
+      v3f = __uint2float_rz(v3);
       q += quasiQuoRem<CHECK_RCP>(u3f, v3f);
-    u2 += v2 * q;
-  }
+      u2 += v2 * q;
+    }
+  else
+    {
+      u2 += v2 * (u3 / v3);
+      u3 %= v3;
+      u3f = __uint2float_rz(u3);
+      v3f = __uint2float_rz(v3);      
+    }
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
