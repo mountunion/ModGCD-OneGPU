@@ -8,9 +8,10 @@
 */
 
 // Defines range of valid input for quasiQuoRem.
-constexpr int RCP_THRESHOLD_EXPT = 22;
+static constexpr int RCP_THRESHOLD_EXPT = 22;
 
 __device__
+static
 inline
 float
 fastReciprocal(float yf)
@@ -39,6 +40,7 @@ fastReciprocal(float yf)
 //  is the exact value of the true quotient.
 template <bool CHECK_RCP>
 __device__
+static
 inline
 uint32_t
 quasiQuoRem(float& xf, float yf)
