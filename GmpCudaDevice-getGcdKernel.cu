@@ -34,6 +34,7 @@
 #include <cstdlib>
 #include <cuda_runtime.h>
 #include "GmpCuda.h"
+
 //  Include the devicesRcpNoCheck definition, which is generated
 //  by a configuration script.
 #include "GmpCudaDevice-gcdDevicesRcpNoCheck.h"
@@ -45,14 +46,6 @@
 
 using namespace GmpCuda;
 
-static constexpr int WARPS_PER_BLOCK   = GmpCudaDevice::GCD_BLOCK_SZ / WARP_SZ;  
-static constexpr unsigned FULL_MASK    = 0xFFFFFFFF;           //  Used in sync functions.
-static constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
-static constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
-
-static constexpr int RCP_THRESHOLD_NORM_CLZ  = 32 - RCP_THRESHOLD_EXPT;  //  # leading zeros in a normalized denominator.
-static constexpr uint32_t RCP_THRESHOLD = 1 << RCP_THRESHOLD_EXPT;
-
 //  Make the cuda architecture number available as a constexpr for all compilation phases.
 static constexpr int CUDA_ARCH =
 #ifdef __CUDA_ARCH__
@@ -62,6 +55,16 @@ static constexpr int CUDA_ARCH =
 #endif
   ;
   
+static constexpr int      WARPS_PER_BLOCK = GmpCudaDevice::GCD_BLOCK_SZ / WARP_SZ;
+
+static constexpr unsigned FULL_MASK    = 0xFFFFFFFF;           //  Used in sync functions.
+static constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
+static constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
+
+static constexpr int      RCP_THRESHOLD_NORM_CLZ  = 32 - RCP_THRESHOLD_EXPT;  //  # leading zeros in a normalized denominator.
+static constexpr uint32_t RCP_THRESHOLD           = 1 << RCP_THRESHOLD_EXPT;
+static constexpr bool     USE_QUASI_TRANSITION    = (CUDA_ARCH < 700);
+
 typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
 
 //  This type is used to conveniently manipulate the modulus and its inverse.
@@ -371,8 +374,6 @@ static
 uint32_t
 modInv(uint32_t u, uint32_t v)
 {
-  constexpr bool QUASI_TRANSITION = (CUDA_ARCH != 700);
-  
   uint32_t u2 = 0, u3 = u;
   uint32_t v2 = 1, v3 = v;
   
@@ -397,10 +398,10 @@ modInv(uint32_t u, uint32_t v)
   //  Although algorithm can tolerate a quasi-quotient here (i.e., possibly one less than
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
   //  so we decide which version to use when the compiler compiles to a specific architecture.
-  uint32_t q = (QUASI_TRANSITION) ? quasiQuoNorm(u3, v3) : u3 / v3;
+  uint32_t q = (USE_QUASI_TRANSITION) ? quasiQuoNorm(u3, v3) : u3 / v3;
   float u3f = __uint2float_rz(u3 - q * v3);
   float v3f = __uint2float_rz(v3);
-  if (QUASI_TRANSITION)
+  if (USE_QUASI_TRANSITION)
     q += quasiQuoRem<CHECK_RCP>(u3f, v3f);
   u2 += v2 * q;
    
@@ -418,10 +419,10 @@ modInv(uint32_t u, uint32_t v)
   
   //  If we had transitioned with a quasi quotient and didn't check the reciprocal, 
   //  u3f == -1.0f is possible, in which case the result will need to be negated.
-  if (QUASI_TRANSITION && !CHECK_RCP)
+  if (USE_QUASI_TRANSITION && !CHECK_RCP)
     negateResult ^= (u3f == -1.0f);
     
-  negateResult ^= (v3f != 1.0f);  //  Update negateResult based on where the answer ended up.
+  negateResult ^= (v3f != 1.0f);  //  Negate result iff answer is not in v2.
   
   if (v3f != 1.0f)                //  Answer in u2--copy into v2.
     v2 = u2;
