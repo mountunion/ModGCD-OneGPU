@@ -397,23 +397,12 @@ modInv(uint32_t u, uint32_t v)
   //  Although algorithm can tolerate a quasi-quotient here (i.e., possibly one less than
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
   //  so we decide which version to use when the compiler compiles to a specific architecture.
-  float u3f, v3f;
+  uint32_t q = (QUASI_TRANSITION) ? quasiQuoNorm(u3, v3) : u3 / v3;
+  float u3f = __uint2float_rz(u3 - q * v3);
+  float v3f = __uint2float_rz(v3);
   if (QUASI_TRANSITION)
-    {
-      uint32_t q = quasiQuoNorm(u3, v3);
-      u3 -= q * v3;
-      u3f = __uint2float_rz(u3);
-      v3f = __uint2float_rz(v3);
-      q += quasiQuoRem<CHECK_RCP>(u3f, v3f);
-      u2 += v2 * q;
-    }
-  else
-    {
-      u2 += v2 * (u3 / v3);
-      u3 %= v3;
-      u3f = __uint2float_rz(u3);
-      v3f = __uint2float_rz(v3);      
-    }
+    q += quasiQuoRem<CHECK_RCP>(u3f, v3f);
+  u2 += v2 * q;
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
@@ -427,9 +416,8 @@ modInv(uint32_t u, uint32_t v)
       u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, v3f);
     }
   
-  //  If we don't check the reciprocal, u3f == -1.0f is possible,
-  //  in which case, the result will need to have the opposite sign from what it would
-  //  have if it were in u2u.
+  //  If we are transitioning with a quasi quotient and don't check the reciprocal, 
+  //  u3f == -1.0f is possible, in which case the result will need to be negated.
   if (QUASI_TRANSITION && !CHECK_RCP)
     negateResult ^= (u3f == -1.0f);
     
