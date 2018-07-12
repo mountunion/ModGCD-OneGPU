@@ -325,8 +325,8 @@ quasiQuo(uint32_t x, uint32_t y)
 }
 
 //  Assumes x >= RCP_THRESHOLD > y. (Recall that RCP_THRESHOLD == 2^RCP_THRESHOLD_EXPT.)
-//  First computes i such that 2^RCP_THRESHOLD_EXPT > y * 2^i >= 2^(RCP_THRESHOLD_EXPT - 1.
-//  Returns q = 2^i * q' such that x - q' * y * 2^i < 2 * y * 2^i,
+//  First computes i such that 2^RCP_THRESHOLD_EXPT > y * 2^i >= 2^(RCP_THRESHOLD_EXPT - 1),
+//  then returns q = 2^i * q' such that x - q' * y * 2^i < 2 * y * 2^i,
 //  i.e., x - q * y < y * 2^(i + 1) < 2*RCP_THRESHOLD.
 __device__
 static
@@ -416,7 +416,7 @@ modInv(uint32_t u, uint32_t v)
       u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, v3f);
     }
   
-  //  If we are transitioning with a quasi quotient and don't check the reciprocal, 
+  //  If we had transitioned with a quasi quotient and didn't check the reciprocal, 
   //  u3f == -1.0f is possible, in which case the result will need to be negated.
   if (QUASI_TRANSITION && !CHECK_RCP)
     negateResult ^= (u3f == -1.0f);
