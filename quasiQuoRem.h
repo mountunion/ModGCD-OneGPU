@@ -8,7 +8,7 @@
 */
 
 // Defines range of valid input for quasiQuoRem.
-constexpr int RCP_THRESHOLD_EXPT = 22;
+static constexpr int RCP_THRESHOLD_EXPT = 22;
 
 __device__
 static
