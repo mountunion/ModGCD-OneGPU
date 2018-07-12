@@ -408,9 +408,9 @@ modInv(uint32_t u, uint32_t v)
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
   //  The loop will stop when u3f <= 1.0.
-  //  If u3f == 1.0, result is in u2.
-  //  If u3f == 0.0, then v3f == 1.0 and result is in v2.
-  //  If u3f ==-1.0, result is in u2.
+  //  If u3f == 1.0, |result| is in u2.
+  //  If u3f == 0.0, then v3f == 1.0 and |result| is in v2.
+  //  If u3f ==-1.0, |result| is in u2.
   while (u3f > 1.0f)
     {
       v2 += u2 * quasiQuoRem<CHECK_RCP>(v3f, u3f);
@@ -419,6 +419,8 @@ modInv(uint32_t u, uint32_t v)
   
   //  If we had transitioned with a quasi quotient and didn't check the reciprocal, 
   //  u3f == -1.0f is possible, in which case the result will need to be negated.
+  //  It's faster to negate twice than to not negate it from the beginning!!!
+  
   if (USE_QUASI_TRANSITION && !CHECK_RCP)
     negateResult ^= (u3f == -1.0f);
     
