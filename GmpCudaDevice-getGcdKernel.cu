@@ -45,16 +45,16 @@
 
 using namespace GmpCuda;
 
-constexpr int WARPS_PER_BLOCK   = GmpCudaDevice::GCD_BLOCK_SZ / WARP_SZ;  
-constexpr unsigned FULL_MASK    = 0xFFFFFFFF;           //  Used in sync functions.
-constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
-constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
+static constexpr int WARPS_PER_BLOCK   = GmpCudaDevice::GCD_BLOCK_SZ / WARP_SZ;  
+static constexpr unsigned FULL_MASK    = 0xFFFFFFFF;           //  Used in sync functions.
+static constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
+static constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
 
-constexpr int RCP_THRESHOLD_NORM_CLZ  = 32 - RCP_THRESHOLD_EXPT;  //  # leading zeros in a normalized denominator.
-constexpr uint32_t RCP_THRESHOLD = 1 << RCP_THRESHOLD_EXPT;
+static constexpr int RCP_THRESHOLD_NORM_CLZ  = 32 - RCP_THRESHOLD_EXPT;  //  # leading zeros in a normalized denominator.
+static constexpr uint32_t RCP_THRESHOLD = 1 << RCP_THRESHOLD_EXPT;
 
 //  Make the cuda architecture number available as a constexpr for all compilation phases.
-constexpr int CUDA_ARCH =
+static constexpr int CUDA_ARCH =
 #ifdef __CUDA_ARCH__
   __CUDA_ARCH__
 #else
