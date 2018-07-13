@@ -402,7 +402,9 @@ modInv(uint32_t u, uint32_t v)
   float u3f = __uint2float_rz(u3 - q * v3);
   float v3f = __uint2float_rz(v3);
   if (USE_QUASI_TRANSITION)
-    q += quasiQuoRem<CHECK_RCP>(u3f, v3f);  // u3f == -1.0f is possible when CHECK_RCP == false.
+    // In: 2 * RCP_THRESHOLD > u3f && RCP_THRESHOLD > v3f.
+    q += quasiQuoRem<CHECK_RCP>(u3f, v3f);  
+    // Out: u3f == -1.0f is possible when CHECK_RCP == false.
   u2 += v2 * q;
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
