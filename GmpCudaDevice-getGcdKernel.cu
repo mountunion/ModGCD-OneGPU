@@ -386,8 +386,8 @@ modInv(uint32_t u, uint32_t v)
       v2 += u2 * quasiQuoRem(v3, u3);
     }
     
-  bool negateResult = (v3 > u3);
-  if  (negateResult)
+  bool resultNegative = (v3 > u3);
+  if  (resultNegative)
     {
       swap(u2, v2);
       swap(u3, v3);
@@ -402,7 +402,7 @@ modInv(uint32_t u, uint32_t v)
   float u3f = __uint2float_rz(u3 - q * v3);
   float v3f = __uint2float_rz(v3);
   if (USE_QUASI_TRANSITION)
-    q += quasiQuoRem<CHECK_RCP>(u3f, v3f);
+    q += quasiQuoRem<CHECK_RCP>(u3f, v3f);  // u3f == -1.0f is possible when CHECK_RCP == false.
   u2 += v2 * q;
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
@@ -417,18 +417,18 @@ modInv(uint32_t u, uint32_t v)
       u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, v3f);
     }
   
-  //  If we had transitioned with a quasi quotient and didn't check the reciprocal, 
-  //  u3f == -1.0f is possible, in which case the result will need to be negated.
-  //  It's faster to negate twice than to not negate it from the beginning!!!
-  
+  //  If u3f == -1.0f, resultNegative will need to be negated.
+  //  before it is negated again because |result| is in u2 and not v2.
+  //  It's faster to negate twice than to not negate at all, probably because
+  //  of the way that the compiler interleaves instructions.
   if (USE_QUASI_TRANSITION && !CHECK_RCP)
-    negateResult ^= (u3f == -1.0f);
+    resultNegative ^= (u3f == -1.0f);
     
-  negateResult ^= (v3f != 1.0f);  //  Negate result iff answer is not in v2.
+  resultNegative ^= (v3f != 1.0f);  //  Negate resultNegative iff |result| is not in v2.
   
-  if (v3f != 1.0f)                //  Answer in u2--copy into v2.
+  if (v3f != 1.0f)                  //  |result| in u2--copy into v2.
     v2 = u2;
-  if (negateResult)
+  if (resultNegative)
     v2 = u - v2;
   return v2;
 }
