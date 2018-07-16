@@ -363,6 +363,21 @@ quasiQuoRem(uint32_t& x, uint32_t y)
   return q;               //  Now x < 2 * y, but unlikely that x >= y.
 }
 
+template <bool CHECK_RCP>
+__device__
+static
+inline
+uint32_t
+transitionalQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
+{ 
+  uint32_t q = (USE_QUASI_TRANSITION) ? quasiQuoNorm(x, y) : x / y;
+  xf = __uint2float_rz(x - q * y);
+  yf =  __uint2float_rz(y);
+  if (USE_QUASI_TRANSITION)
+    q += quasiQuoRem<CHECK_RCP>(xf, yf);
+  return q;  
+}
+
 //  Return 1/v (mod u), assuming gcd(u,v) == 1.
 //  Assumes u > v > 0.
 //  Uses the extended Euclidean algorithm:
@@ -386,8 +401,8 @@ modInv(uint32_t u, uint32_t v)
       v2 += u2 * quasiQuoRem(v3, u3);
     }
     
-  bool resultNegative = (v3 > u3);
-  if  (resultNegative)
+  bool swapUV = (v3 > u3);
+  if  (swapUV)
     {
       swap(u2, v2);
       swap(u3, v3);
@@ -398,13 +413,8 @@ modInv(uint32_t u, uint32_t v)
   //  Although algorithm can tolerate a quasi-quotient here (i.e., possibly one less than
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
   //  so we decide which version to use when the compiler compiles to a specific architecture.
-  uint32_t q = (USE_QUASI_TRANSITION) ? quasiQuoNorm(u3, v3) : u3 / v3;
-  float u3f = __uint2float_rz(u3 - q * v3);
-  float v3f = __uint2float_rz(v3);
-    // In: 2 * RCP_THRESHOLD > u3f && RCP_THRESHOLD > v3f.
-  if (USE_QUASI_TRANSITION)
-    q += quasiQuoRem<CHECK_RCP>(u3f, v3f);  
-  u2 += v2 * q;
+  float u3f, v3f;
+  u2 += v2 * transitionalQuoRem<CHECK_RCP>(u3f, v3f, u3, v3);
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
@@ -416,14 +426,10 @@ modInv(uint32_t u, uint32_t v)
       v2 += u2 * quasiQuoRem<CHECK_RCP>(v3f, u3f);
       u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, v3f);
     }
-    
-  //resultNegative ^= (u3f == -1.0f); //  Not needed, but make code faster--why?
-  
-  resultNegative ^= (v3f != 1.0f);  //  Negate resultNegative iff |result| is not in v2.
-  
-  if (v3f != 1.0f)                  //  |result| in u2--copy into v2.
-    v2 = u2;
-  if (resultNegative)
+      
+  if  (v3f != 1.0f)             //  Seems to be faster to check v3f than to check u3f.
+    v2 = u2;                    //  |result| in u2--copy into v2.
+  if ((v3f != 1.0f) ^ swapUV)
     v2 = u - v2;
   return v2;
 }
