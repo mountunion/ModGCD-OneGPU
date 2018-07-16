@@ -401,10 +401,9 @@ modInv(uint32_t u, uint32_t v)
   uint32_t q = (USE_QUASI_TRANSITION) ? quasiQuoNorm(u3, v3) : u3 / v3;
   float u3f = __uint2float_rz(u3 - q * v3);
   float v3f = __uint2float_rz(v3);
-  if (USE_QUASI_TRANSITION)
     // In: 2 * RCP_THRESHOLD > u3f && RCP_THRESHOLD > v3f.
+  if (USE_QUASI_TRANSITION)
     q += quasiQuoRem<CHECK_RCP>(u3f, v3f);  
-    // Out: u3f == -1.0f is possible when CHECK_RCP == false.
   u2 += v2 * q;
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
@@ -412,20 +411,14 @@ modInv(uint32_t u, uint32_t v)
   //  The loop will stop when u3f <= 1.0.
   //  If u3f == 1.0, |result| is in u2.
   //  If u3f == 0.0, then v3f == 1.0 and |result| is in v2.
-  //  If u3f ==-1.0, |result| is in u2.
   while (u3f > 1.0f)
     {
       v2 += u2 * quasiQuoRem<CHECK_RCP>(v3f, u3f);
       u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, v3f);
     }
-  
-  //  If u3f == -1.0f, resultNegative will need to be negated.
-  //  before it is negated again because |result| is in u2 and not v2.
-  //  It's faster to negate twice than to not negate at all, probably because
-  //  of the way that the compiler interleaves instructions.
-  if (USE_QUASI_TRANSITION && !CHECK_RCP)
-    resultNegative ^= (u3f == -1.0f);
     
+  //resultNegative ^= (u3f == -1.0f); //  Not needed, but make code faster--why?
+  
   resultNegative ^= (v3f != 1.0f);  //  Negate resultNegative iff |result| is not in v2.
   
   if (v3f != 1.0f)                  //  |result| in u2--copy into v2.

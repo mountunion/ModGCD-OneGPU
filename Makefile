@@ -84,7 +84,7 @@ GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -c $<
 
 GmpCudaDevice-getGcdKernel.o: GmpCudaDevice-getGcdKernel.cu GmpCudaDevice-gcdDevicesRcpNoCheck.h quasiQuoRem.h GmpCuda.h
-	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $<
+	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -keep -keep-dir ./intermediates -c $<
 
 GmpCudaDevice-getGcdKernel-coop-gps.o: GmpCudaDevice-getGcdKernel.cu GmpCudaDevice-gcdDevicesRcpNoCheck.h quasiQuoRem.h GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -DUSE_COOP_GROUPS $(GCD_KERN_FLAGS) -c $< -o $@
