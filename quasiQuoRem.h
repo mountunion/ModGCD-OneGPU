@@ -43,11 +43,11 @@ __device__
 static
 inline
 uint32_t
-quasiQuoRem(float& x, float y)
+quasiQuoRem(float& z, float x, float y)
 {
   float q = truncf(__fmul_rz(x, fastReciprocal(y)));
-  x = __fmaf_rz(q, -y, x); 
-  if (CHECK_RCP && x < 0.0f)
-    x += y, q -= 1.0f;
+  z = __fmaf_rz(q, -y, x); 
+  if (CHECK_RCP && z < 0.0f)
+    z += y, q -= 1.0f;
   return __float2uint_rz(q);
 }

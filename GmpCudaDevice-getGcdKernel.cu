@@ -349,7 +349,7 @@ __device__
 static
 inline
 uint32_t
-quasiQuoRem(uint32_t& x, uint32_t y)
+quasiQuoRem(uint32_t& z, uint32_t x, uint32_t y)
 { 
 //  Computes an approximation q for x / y, when x, y >= RCP_THRESHOLD.
 //  q could be too small by 1 or 2.
@@ -357,10 +357,10 @@ quasiQuoRem(uint32_t& x, uint32_t y)
 //  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
 //  uint32_t q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
   uint32_t q = quasiQuo(x, y);
-  x -= q * y; 
-  if (x >= y)  //  Now x < 3 * y.
-    x -= y, q += 1;
-  return q;               //  Now x < 2 * y, but unlikely that x >= y.
+  z = x - q * y; 
+  if (z >= y)  //  Now z < 3 * y.
+    z -= y, q += 1;
+  return q;               //  Now z < 2 * y, but unlikely that z >= y.
 }
 
 template <bool CHECK_RCP>
@@ -368,13 +368,12 @@ __device__
 static
 inline
 uint32_t
-transQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
+quasiQuoRem(float& z, uint32_t x, uint32_t y)
 { 
   uint32_t q = (USE_QUASI_TRANSITION) ? quasiQuoNorm(x, y) : x / y;
-  xf = __uint2float_rz(x - q * y);
-  yf =  __uint2float_rz(y);
+  z = __uint2float_rz(x - q * y);
   if (USE_QUASI_TRANSITION)
-    q += quasiQuoRem<CHECK_RCP>(xf, yf);
+    q += quasiQuoRem<CHECK_RCP>(z, z, __uint2float_rz(y));
   return q;  
 }
 
@@ -395,10 +394,10 @@ modInv(uint32_t u, uint32_t v)
   //  When u3 and v3 are both large enough, divide with floating point hardware.
   while  (v3 >= RCP_THRESHOLD)
     {
-      u2 += v2 * quasiQuoRem(u3, v3);
+      u2 += v2 * quasiQuoRem(u3, u3, v3);
       if (u3 <  RCP_THRESHOLD)
         break;
-      v2 += u2 * quasiQuoRem(v3, u3);
+      v2 += u2 * quasiQuoRem(v3, v3, u3);
     }
     
   bool swapUV = (v3 > u3);
@@ -413,18 +412,19 @@ modInv(uint32_t u, uint32_t v)
   //  Although algorithm can tolerate a quasi-quotient here (i.e., possibly one less than
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
   //  so we decide which version to use when the compiler compiles to a specific architecture.
-  float u3f, v3f;
-  u2 += v2 * transQuoRem<CHECK_RCP>(u3f, v3f, u3, v3);
+  float u3f;
+  u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, u3, v3);
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
   //  The loop will stop when u3f <= 1.0.
   //  If u3f == 1.0, |result| is in u2.
   //  If u3f == 0.0, then v3f == 1.0 and |result| is in v2.
+  float v3f = __uint2float_rz(v3);
   while (u3f > 1.0f)
     {
-      v2 += u2 * quasiQuoRem<CHECK_RCP>(v3f, u3f);
-      u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, v3f);
+      v2 += u2 * quasiQuoRem<CHECK_RCP>(v3f, v3f, u3f);
+      u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, u3f, v3f);
     }
       
   if  (v3f != 1.0f)             //  Seems to be faster to check v3f than to check u3f.
