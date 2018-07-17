@@ -426,9 +426,10 @@ modInv(uint32_t u, uint32_t v)
       u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, u3f, v3f);
     }
       
-  if  (v3f != 1.0f)             //  Seems to be faster to check v3f than to check u3f.
-    v2 = u2;                    //  |result| in u2--copy into v2.
-  if ((v3f != 1.0f) ^ swapUV)
+  bool resultNotInV = (v3f != 1.0f); //  Seems to be faster to check v3f than to check u3f.
+  if  (resultNotInV)             
+    v2 = u2;
+  if (resultNotInV ^ swapUV)
     v2 = u - v2;
   return v2;
 }
