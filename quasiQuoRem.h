@@ -14,11 +14,11 @@ __device__
 static
 inline
 float
-fastReciprocal(float yf)
+fastReciprocal(float y)
 {
-  float rf;
-  asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(rf) : "f"(yf));
-  return rf;
+  float r;
+  asm("rcp.approx.ftz.f32 %0, %1;" : "=f"(r) : "f"(y));
+  return r;
 }
 
 //  quasiQuoRem computes a quotient qf such that xf - qf * yf < 2 * yf.
@@ -43,11 +43,11 @@ __device__
 static
 inline
 uint32_t
-quasiQuoRem(float& xf, float yf)
+quasiQuoRem(float& x, float y)
 {
-  float qf = truncf(__fmul_rz(xf, fastReciprocal(yf)));
-  xf = __fmaf_rz(qf, -yf, xf); 
-  if (CHECK_RCP && xf < 0.0f)
-    xf += yf, qf -= 1.0f;
-  return __float2uint_rz(qf);
+  float q = truncf(__fmul_rz(x, fastReciprocal(y)));
+  x = __fmaf_rz(q, -y, x); 
+  if (CHECK_RCP && x < 0.0f)
+    x += y, q -= 1.0f;
+  return __float2uint_rz(q);
 }

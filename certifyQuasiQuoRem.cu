@@ -25,8 +25,7 @@ __global__ void kernel(bool* fail)
         {
           float xf = __uint2float_rz(x);
           float qf = quasiQuoRem<false>(xf, yf);
-         // if (xf >= -0.0f)
-          if (xf >= 0.0f)
+          if (yf + yf > xf && xf >= 0.0f)
             continue;
           *fail = true;
           printf("Failed for x == %u and y == %u: qf == %f, xf = %f\n", x, y, qf, xf);

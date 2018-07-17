@@ -368,7 +368,7 @@ __device__
 static
 inline
 uint32_t
-transitionalQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
+transQuoRem(float& __restrict__ xf, float& __restrict__ yf, uint32_t x, uint32_t y)
 { 
   uint32_t q = (USE_QUASI_TRANSITION) ? quasiQuoNorm(x, y) : x / y;
   xf = __uint2float_rz(x - q * y);
@@ -414,7 +414,7 @@ modInv(uint32_t u, uint32_t v)
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
   //  so we decide which version to use when the compiler compiles to a specific architecture.
   float u3f, v3f;
-  u2 += v2 * transitionalQuoRem<CHECK_RCP>(u3f, v3f, u3, v3);
+  u2 += v2 * transQuoRem<CHECK_RCP>(u3f, v3f, u3, v3);
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
