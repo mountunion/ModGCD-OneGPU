@@ -24,7 +24,7 @@ __global__ void kernel(bool* fail)
       for (uint32_t x = 1; x < 2 * RCP_THRESHOLD; x += 1)
         {
           float xf = __uint2float_rz(x);
-          float qf = quasiQuoRem<false>(xf, yf);
+          float qf = quasiQuoRem<false>(xf, xf, yf);
           if (yf + yf > xf && xf >= 0.0f)
             continue;
           *fail = true;
