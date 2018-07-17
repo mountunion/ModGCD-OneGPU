@@ -21,11 +21,23 @@ __global__ void kernel(bool* fail)
   for (uint32_t y = blockIdx.x * blockDim.x + threadIdx.x  + 1; y < RCP_THRESHOLD; y += blockDim.x * gridDim.x)
     {
       float yf = __uint2float_rz(y);
-      for (uint32_t x = 1; x < 2 * RCP_THRESHOLD; x += 1)
+      for (uint32_t x = 1; x < 2 * y; x += 1)
+        {
+          if (x > 1 && x == y)
+            continue;
+          float xf = __uint2float_rz(x);
+          float qf = quasiQuoRem<false>(xf, xf, yf);
+          if (yf > xf && xf >= 0.0f)
+            continue;
+          *fail = true;
+          printf("Failed for x == %u and y == %u: qf == %f, xf = %f\n", x, y, qf, xf);
+        }
+      float yf2 = yf + yf;
+      for (uint32_t x = 2 * y; x < 2 * RCP_THRESHOLD; x += 1)
         {
           float xf = __uint2float_rz(x);
           float qf = quasiQuoRem<false>(xf, xf, yf);
-          if (yf + yf > xf && xf >= 0.0f)
+          if (yf2 > xf && xf >= 0.0f)
             continue;
           *fail = true;
           printf("Failed for x == %u and y == %u: qf == %f, xf = %f\n", x, y, qf, xf);
