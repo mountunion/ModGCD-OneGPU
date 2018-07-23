@@ -377,7 +377,7 @@ quasiQuoRem(float& z, uint32_t x, uint32_t y)
   return q;  
 }
 
-//  Return 1/v (mod u), assuming gcd(u,v) == 1 && u > v > 0.
+//  Return 1/v (mod m), assuming gcd(m,v) == 1 && m > v > 0.
 //  Based on the extended Euclidean algorithm:
 //  see Knuth, The Art of Computer Programming, vol. 2, 3/e,
 //  Algorithm X on pp342-3.
