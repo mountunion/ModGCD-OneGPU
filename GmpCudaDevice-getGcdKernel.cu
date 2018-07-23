@@ -349,7 +349,7 @@ __device__
 static
 inline
 uint32_t
-quasiQuoRem(uint32_t& z, uint32_t x, uint32_t y)
+quasiQuoRem(uint32_t& r, uint32_t x, uint32_t y)
 { 
 //  Computes an approximation q for x / y, when x, y >= RCP_THRESHOLD.
 //  q could be too small by 1 or 2.
@@ -357,9 +357,9 @@ quasiQuoRem(uint32_t& z, uint32_t x, uint32_t y)
 //  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
 //  uint32_t q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
   uint32_t q = quasiQuo(x, y);
-  z = x - q * y; 
-  if (z >= y)  //  Now z < 3 * y.
-    z -= y, q += 1;
+  r = x - q * y; 
+  if (r >= y)  //  Now z < 3 * y.
+    r -= y, q += 1;
   return q;               //  Now z < 2 * y, but unlikely that z >= y.
 }
 
@@ -368,12 +368,12 @@ __device__
 static
 inline
 uint32_t
-quasiQuoRem(float& z, uint32_t x, uint32_t y)
+quasiQuoRem(float& r, uint32_t x, uint32_t y)
 { 
   uint32_t q = (USE_QUASI_TRANSITION) ? quasiQuoNorm(x, y) : x / y;
-  z = __uint2float_rz(x - q * y);
+  r = __uint2float_rz(x - q * y);
   if (USE_QUASI_TRANSITION)
-    q += quasiQuoRem<CHECK_RCP>(z, z, __uint2float_rz(y));
+    q += quasiQuoRem<CHECK_RCP>(r, r, __uint2float_rz(y));
   return q;  
 }
 
