@@ -21,33 +21,23 @@ fastReciprocal(float y)
   return r;
 }
 
-//  quasiQuoRem computes a quotient qf such that xf - qf * yf < 2 * yf.
-//  Precondition: xf and yf are truncated integers and 
-//  if CHECK_RCP == true,
-//  then 3*2^RCP_THRESHOLD_EXPT > xf >= 1.0 && 2^RCP_THRESHOLD_EXPT > yf >= 1.0
-//  else 2^RCP_THRESHOLD_EXPT > xf, yf >= 1.0.
-//  Note that __fdividef(x, y) is accurate to 2 ulp:
-//  when yf >= 4.0, 0 <= xf/yf < 3*2^20 < 2^RCP_THRESHOLD_EXPT means 2 ulp <= 0.5,
-//  so truncf(__fdividef(xf, yf)) should give either the true quotient or one less.
-//  When yf == 2.0, 0 <= xf/2.0 < 3*2^20, so 2 ulp <= 0.5.
-//  When yf == 3.0, 0 <= xf/3.0 < 2^22, so 2 ulp <= 0.5.
-//  When yf == 1.0, the quotient should always be exact and equal to xf, 
-//  since __fdividef(xf, yf) is based on multiplication by the reciprocal.
-//  Also note that, when yf < xf < 2 * yf, that 1.0 + 1/yf <= qf <= 2.0 - 1/yf, 
-//  and 1
-//  with 2 ulp <= 2 * 2^
-//  so trunc(qf) == 1, which
-//  is the exact value of the true quotient.
+//  quasiQuoRem computes a quasi-quotient q and quasi-remainder r = x - q * y
+//  such that 0 <= r < 2 * y.
+//  Preconditions: 
+//    x and y are integers
+//    0 < x < RCP_THRESHOLD * 2
+//    0 < y < RCP_THRESHOLD
+//    if x > 1, then x != y.
 template <bool CHECK_RCP>
 __device__
 static
 inline
 uint32_t
-quasiQuoRem(float& z, float x, float y)
+quasiQuoRem(float& r, float x, float y)
 {
   float q = truncf(__fmul_rz(x, fastReciprocal(y)));
-  z = __fmaf_rz(q, -y, x); 
-  if (CHECK_RCP && z < 0.0f)
-    z += y, q -= 1.0f;
+  r = __fmaf_rz(q, -y, x); 
+  if (CHECK_RCP && r < 0.0f)
+    r += y, q -= 1.0f;
   return __float2uint_rz(q);
 }
