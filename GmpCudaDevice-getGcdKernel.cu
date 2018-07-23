@@ -385,9 +385,9 @@ template <bool CHECK_RCP>
 __device__
 static
 uint32_t
-modInv(uint32_t u, uint32_t v)
+modInv(uint32_t v, uint32_t m)
 {
-  uint32_t u2 = 0, u3 = u;
+  uint32_t u2 = 0, u3 = m;
   uint32_t v2 = 1, v3 = v;
   
   //  When u3 and v3 are both large enough, divide with floating point hardware.
@@ -429,7 +429,7 @@ modInv(uint32_t u, uint32_t v)
   if  (resultNotInV)             
     v2 = u2;
   if (resultNotInV ^ swapUV)
-    v2 = u - v2;
+    v2 = m - v2;
   return v2;
 }
 
@@ -441,7 +441,7 @@ inline
 uint32_t
 modDiv(uint32_t u, uint32_t v, modulus_t m)
 {
-  return modMul(u, modInv<CHECK_RCP>(m.modulus, v), m);
+  return modMul(u, modInv<CHECK_RCP>(v, m.modulus), m);
 }
 
 //  Calculate x mod m for a multiword unsigned integer x.
