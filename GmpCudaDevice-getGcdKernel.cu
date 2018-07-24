@@ -61,8 +61,8 @@ static constexpr unsigned FULL_MASK    = 0xFFFFFFFF;           //  Used in sync 
 static constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
 static constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
 
-static constexpr int      RCP_THRESHOLD_NORM_CLZ  = 32 - RCP_THRESHOLD_EXPT;  //  # leading zeros in a normalized denominator.
-static constexpr uint32_t RCP_THRESHOLD           = 1 << RCP_THRESHOLD_EXPT;
+static constexpr int      FLOAT_THRESHOLD_NORM_CLZ  = 32 - FLOAT_THRESHOLD_EXPT;  //  # leading zeros in a normalized denominator.
+static constexpr uint32_t FLOAT_THRESHOLD           = 1 << FLOAT_THRESHOLD_EXPT;
 static constexpr bool     USE_QUASI_TRANSITION    = (CUDA_ARCH < 700);
 
 typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
@@ -327,23 +327,23 @@ quasiQuo(uint32_t x, uint32_t y)
   return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
 }
 
-//  Assumes x >= RCP_THRESHOLD > y. (Recall that RCP_THRESHOLD == 2^RCP_THRESHOLD_EXPT.)
-//  First computes i such that 2^RCP_THRESHOLD_EXPT > y * 2^i >= 2^(RCP_THRESHOLD_EXPT - 1),
+//  Assumes x >= FLOAT_THRESHOLD > y. (Recall that FLOAT_THRESHOLD == 2^FLOAT_THRESHOLD_EXPT.)
+//  First computes i such that 2^FLOAT_THRESHOLD_EXPT > y * 2^i >= 2^(FLOAT_THRESHOLD_EXPT - 1),
 //  then returns q = 2^i * q' such that x - q' * y * 2^i < 2 * y * 2^i,
-//  i.e., x - q * y < y * 2^(i + 1) < 2*RCP_THRESHOLD.
+//  i.e., x - q * y < y * 2^(i + 1) < 2*FLOAT_THRESHOLD.
 __device__
 static
 inline
 uint32_t
 quasiQuoNorm(uint32_t x, uint32_t y)
 {
-  int i = __clz(y) - RCP_THRESHOLD_NORM_CLZ;
+  int i = __clz(y) - FLOAT_THRESHOLD_NORM_CLZ;
   return quasiQuo(x, y << i) << i;
 }
 
   
 //  Faster divide possible when x and y are close in size.
-//  Precondition: 2^32 > x, y >= 2^RCP_THRESHOLD_EXPT, so 0 <= x / y < 2^RCP_THRESHOLD_NORM_CLZ.
+//  Precondition: 2^32 > x, y >= 2^FLOAT_THRESHOLD_EXPT, so 0 <= x / y < 2^FLOAT_THRESHOLD_NORM_CLZ.
 //  Could produce a quotient that's too small by 1--but modInv can tolerate that.
 __device__
 static
@@ -351,7 +351,7 @@ inline
 uint32_t
 quasiQuoRem(uint32_t& r, uint32_t x, uint32_t y)
 { 
-//  Computes an approximation q for x / y, when x, y >= RCP_THRESHOLD.
+//  Computes an approximation q for x / y, when x, y >= FLOAT_THRESHOLD.
 //  q could be too small by 1 or 2.
 //  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
 //  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
@@ -391,10 +391,10 @@ modInv(uint32_t v, uint32_t m)
   uint32_t v2 = 1, v3 = v;
   
   //  When u3 and v3 are both large enough, divide with floating point hardware.
-  while  (v3 >= RCP_THRESHOLD)
+  while  (v3 >= FLOAT_THRESHOLD)
     {
       u2 += v2 * quasiQuoRem(u3, u3, v3);
-      if (u3 <  RCP_THRESHOLD)
+      if (u3 <  FLOAT_THRESHOLD)
         break;
       v2 += u2 * quasiQuoRem(v3, v3, u3);
     }
@@ -406,7 +406,7 @@ modInv(uint32_t v, uint32_t m)
       swap(u3, v3);
     }
 
-  //  u3 >= RCP_THRESHOLD > v3.
+  //  u3 >= FLOAT_THRESHOLD > v3.
   //  Transition to both u3 and v3 small, so values are cast into floats.
   //  Although algorithm can tolerate a quasi-quotient here (i.e., possibly one less than
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
