@@ -21,6 +21,18 @@ __global__ void kernel(bool* fail)
   for (uint32_t y = blockIdx.x * blockDim.x + threadIdx.x  + 1; y < FLOAT_THRESHOLD; y += blockDim.x * gridDim.x)
     {
       float yf = __uint2float_rz(y);
+#if 0
+      //  First check qualities of fastReciprocal.
+      float rf = fastReciprocal(yf);
+      float rf2 = __frcp_rz(yf);
+      if (rf > rf2)  //  This fails.
+        {
+          *fail = true;
+          printf("Reciprocal failed for y == %u: yf == %f, rf == %x, rf2 == %x\n", y, yf, *(unsigned int *)&rf, *(unsigned int *)&rf2);
+        }
+#endif
+      
+      //  Now make sure quasiQuoRem<false> satisfies postconditions.
       for (uint32_t x = 1; x < 2 * y; x += 1)
         {
           if (x > 1 && x == y)
@@ -38,6 +50,15 @@ __global__ void kernel(bool* fail)
           float xf = __uint2float_rz(x);
           float qf = quasiQuoRem<false>(xf, xf, yf);
           if (yf2 > xf && xf >= 0.0f)
+            continue;
+          *fail = true;
+          printf("Failed for x == %u and y == %u: qf == %f, xf = %f\n", x, y, qf, xf);
+        }
+      for (uint32_t x = 2 * FLOAT_THRESHOLD; x < 3 * FLOAT_THRESHOLD; x += 1)
+        {
+          float xf = __uint2float_rz(x);
+          float qf = quasiQuoRem<false>(xf, xf, yf);
+          if (yf2 > xf && xf >= -1.0f)
             continue;
           *fail = true;
           printf("Failed for x == %u and y == %u: qf == %f, xf = %f\n", x, y, qf, xf);

@@ -324,13 +324,14 @@ inline
 uint32_t
 quasiQuo(uint32_t x, uint32_t y)
 { 
-  return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
+  return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_ru(y)), -1.0f));
+  // changed ..._rz(y) to ..._ru(y)
 }
 
 //  Assumes x >= FLOAT_THRESHOLD > y. (Recall that FLOAT_THRESHOLD == 2^FLOAT_THRESHOLD_EXPT.)
 //  First computes i such that 2^FLOAT_THRESHOLD_EXPT > y * 2^i >= 2^(FLOAT_THRESHOLD_EXPT - 1),
-//  then returns q = 2^i * q' such that x - q' * y * 2^i < 2 * y * 2^i,
-//  i.e., x - q * y < y * 2^(i + 1) < 2*FLOAT_THRESHOLD.
+//  then returns q = 2^i * q' such that x - q' * y * 2^i < 3 * y * 2^i,
+//  i.e., x - q * y < 3 * FLOAT_THRESHOLD.
 __device__
 static
 inline
@@ -413,6 +414,7 @@ modInv(uint32_t v, uint32_t m)
   //  so we decide which version to use when the compiler compiles to a specific architecture.
   float u3f, v3f = __uint2float_rz(v3);
   u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, u3, v3);
+  swapUV ^= (u3f == -1.0f);
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
@@ -425,7 +427,7 @@ modInv(uint32_t v, uint32_t m)
       u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, u3f, v3f);
     }
       
-  bool resultNotInV = (v3f != 1.0f); //  Seems to be faster to check v3f than to check u3f.
+  bool resultNotInV = (v3f != 1.0f); 
   if  (resultNotInV)             
     v2 = u2;
   if (resultNotInV ^ swapUV)
