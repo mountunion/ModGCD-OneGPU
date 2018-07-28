@@ -63,7 +63,8 @@ static constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than a
 
 static constexpr int      FLOAT_THRESHOLD_NORM_CLZ  = 32 - FLOAT_THRESHOLD_EXPT;  //  # leading zeros in a normalized denominator.
 static constexpr uint32_t FLOAT_THRESHOLD           = 1 << FLOAT_THRESHOLD_EXPT;
-static constexpr bool     USE_QUASI_TRANSITION    = (CUDA_ARCH < 700);
+static constexpr bool     USE_QUASI_TRANSITION      = (CUDA_ARCH < 700);
+static constexpr float    QUASI_QUO_ERR             = 0x1p11f/FLOAT_THRESHOLD;    // == 2^(11 - FLOAT_THRESHOLD_EXPT).
 
 typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
 
@@ -317,9 +318,9 @@ swap(T& __restrict__ x, T& __restrict__ y)
 //  Computes a "quasi" quotient for x / y, when x, y >= FLOAT_THRESHOLD/2.
 //  Approximation could be too small by 1.
 //  The floating point calculation of x/y from multiplying 
-//  by the reciprocal here could be too high by as much as 2^(-10)
-//  and too low by as much as 2^(-1) + 2^(-4) (slight overestimate)
-//  make it always too low, by subtracting 0.5.  
+//  by the reciprocal here could be too high by as much as QUASI_QUO_ERR
+//  and too low by as much as 2^(-1) + 2^(-13) + QUASI_QUO_ERR (slight overestimate);
+//  make it always too low, by subtracting QUASI_QUO_ERR.  
 //  Then obtain  quasi-quotient by truncating toward zero.
 //  The quasi-quotient could either be OK or too low by 1.
 __device__
@@ -328,7 +329,7 @@ inline
 uint32_t
 quasiQuo(uint32_t x, uint32_t y)
 { 
-  return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_ru(y)), -0.125f));
+  return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_ru(y)), -QUASI_QUO_ERR));
 }
 
 //  Assumes x >= FLOAT_THRESHOLD > y. (Recall that FLOAT_THRESHOLD == 2^FLOAT_THRESHOLD_EXPT.)
