@@ -314,24 +314,27 @@ swap(T& __restrict__ x, T& __restrict__ y)
 }
 
 
-//  Computes an approximation for x / y, when x, y >= 2^21.
-//  Approximation could be too small by 1 or 2.
-//  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
-//  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
+//  Computes a "quasi" quotient for x / y, when x, y >= FLOAT_THRESHOLD/2.
+//  Approximation could be too small by 1.
+//  The floating point calculation of x/y from multiplying 
+//  by the reciprocal here could be too high by as much as 2^(-10)
+//  and too low by as much as 2^(-1) + 2^(-4) (slight overestimate)
+//  make it always too low, by subtracting 0.5.  
+//  Then obtain  quasi-quotient by truncating toward zero.
+//  The quasi-quotient could either be OK or too low by 1.
 __device__
 static
 inline
 uint32_t
 quasiQuo(uint32_t x, uint32_t y)
 { 
-  return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_ru(y)), -1.0f));
-  // changed ..._rz(y) to ..._ru(y)
+  return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_ru(y)), -0.125f));
 }
 
 //  Assumes x >= FLOAT_THRESHOLD > y. (Recall that FLOAT_THRESHOLD == 2^FLOAT_THRESHOLD_EXPT.)
 //  First computes i such that 2^FLOAT_THRESHOLD_EXPT > y * 2^i >= 2^(FLOAT_THRESHOLD_EXPT - 1),
-//  then returns q = 2^i * q' such that x - q' * y * 2^i < 3 * y * 2^i,
-//  i.e., x - q * y < 3 * FLOAT_THRESHOLD.
+//  then returns q = 2^i * q' such that x - q' * y * 2^i < 2 * y * 2^i,
+//  i.e., x - q * y < 2 * FLOAT_THRESHOLD.
 __device__
 static
 inline
@@ -343,25 +346,19 @@ quasiQuoNorm(uint32_t x, uint32_t y)
 }
 
   
-//  Faster divide possible when x and y are close in size.
 //  Precondition: 2^32 > x, y >= 2^FLOAT_THRESHOLD_EXPT, so 0 <= x / y < 2^FLOAT_THRESHOLD_NORM_CLZ.
-//  Could produce a quotient that's too small by 1--but modInv can tolerate that.
+//  Computes quotient q and remainder r for x / y, when x, y >= FLOAT_THRESHOLD.
 __device__
 static
 inline
 uint32_t
-quasiQuoRem(uint32_t& r, uint32_t x, uint32_t y)
+quoRem(uint32_t& r, uint32_t x, uint32_t y)
 { 
-//  Computes an approximation q for x / y, when x, y >= FLOAT_THRESHOLD.
-//  q could be too small by 1 or 2.
-//  The estimate of q from multiplying by the reciprocal here could be too high or too low by 1;
-//  make it too low by 1 or 2, by subtracting 1.0 BEFORE truncating toward zero.
-//  uint32_t q = __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_rz(y)), -1.0f));
   uint32_t q = quasiQuo(x, y);
   r = x - q * y; 
-  if (r >= y)  //  Now z < 3 * y.
+  if (r >= y)  //  q is too low by 1; correct.
     r -= y, q += 1;
-  return q;               //  Now z < 2 * y, but unlikely that z >= y.
+  return q; 
 }
 
 template <bool CHECK_RCP>
@@ -394,10 +391,10 @@ modInv(uint32_t v, uint32_t m)
   //  When u3 and v3 are both large enough, divide with floating point hardware.
   while  (v3 >= FLOAT_THRESHOLD)
     {
-      u2 += v2 * quasiQuoRem(u3, u3, v3);
+      u2 += v2 * quoRem(u3, u3, v3);
       if (u3 <  FLOAT_THRESHOLD)
         break;
-      v2 += u2 * quasiQuoRem(v3, v3, u3);
+      v2 += u2 * quoRem(v3, v3, u3);
     }
     
   bool swapUV = (v3 > u3);
@@ -414,7 +411,6 @@ modInv(uint32_t v, uint32_t m)
   //  so we decide which version to use when the compiler compiles to a specific architecture.
   float u3f, v3f = __uint2float_rz(v3);
   u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, u3, v3);
-  swapUV ^= (u3f == -1.0f);
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
