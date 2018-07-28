@@ -345,8 +345,7 @@ quasiQuoNorm(uint32_t x, uint32_t y)
   int i = __clz(y) - FLOAT_THRESHOLD_NORM_CLZ;
   return quasiQuo(x, y << i) << i;
 }
-
-  
+ 
 //  Precondition: 2^32 > x, y >= 2^FLOAT_THRESHOLD_EXPT, so 0 <= x / y < 2^FLOAT_THRESHOLD_NORM_CLZ.
 //  Computes quotient q and remainder r for x / y, when x, y >= FLOAT_THRESHOLD.
 __device__
@@ -424,10 +423,10 @@ modInv(uint32_t v, uint32_t m)
       u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, u3f, v3f);
     }
       
-  bool resultNotInV = (v3f != 1.0f); 
-  if  (resultNotInV)             
+  bool resultInU = (v3f != 1.0f); 
+  if  (resultInU)             
     v2 = u2;
-  if (resultNotInV ^ swapUV)
+  if  (resultInU ^ swapUV)
     v2 = m - v2;
   return v2;
 }
