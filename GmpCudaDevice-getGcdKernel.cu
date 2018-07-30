@@ -46,24 +46,11 @@
 
 using namespace GmpCuda;
 
-//  Make the cuda architecture number available as a constexpr for all compilation phases.
-static constexpr int CUDA_ARCH =
-#ifdef __CUDA_ARCH__
-  __CUDA_ARCH__
-#else
-  -1
-#endif
-  ;
-  
 static constexpr int      WARPS_PER_BLOCK = GmpCudaDevice::GCD_BLOCK_SZ / WARP_SZ;
 
 static constexpr unsigned FULL_MASK    = 0xFFFFFFFF;           //  Used in sync functions.
 static constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modulus portion of pair.
 static constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
-
-static constexpr int      FLOAT_THRESHOLD_NORM_CLZ  = 32 - FLOAT_THRESHOLD_EXPT;  //  # leading zeros in a normalized denominator.
-static constexpr bool     USE_QUASI_TRANSITION      = (CUDA_ARCH < 700);
-static constexpr float    QUASI_QUO_ERR             = 0x1p11f/FLOAT_THRESHOLD;    // == 2^(11 - FLOAT_THRESHOLD_EXPT).
 
 typedef GmpCudaDevice::pair_t pair_t;  //  Used to pass back result.
 
@@ -311,67 +298,6 @@ swap(T& __restrict__ x, T& __restrict__ y)
   T tmp = x;
   x = y;
   y = tmp;
-}
-
-
-//  Computes a "quasi" quotient for x / y, when x, y >= FLOAT_THRESHOLD/2.
-//  Approximation could be too small by 1.
-//  The floating point calculation of x/y from multiplying 
-//  by the reciprocal here could be too high by as much as QUASI_QUO_ERR
-//  and too low by as much as 2^(-1) + 2^(-13) + QUASI_QUO_ERR (slight overestimate);
-//  make it always too low, by subtracting QUASI_QUO_ERR.  
-//  Then obtain  quasi-quotient by truncating toward zero.
-//  The quasi-quotient could either be OK or too low by 1.
-__device__
-static
-inline
-uint32_t
-quasiQuo(uint32_t x, uint32_t y)
-{ 
-  return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_ru(y)), -QUASI_QUO_ERR));
-}
-
-//  Assumes x >= FLOAT_THRESHOLD > y. (Recall that FLOAT_THRESHOLD == 2^FLOAT_THRESHOLD_EXPT.)
-//  First computes i such that 2^FLOAT_THRESHOLD_EXPT > y * 2^i >= 2^(FLOAT_THRESHOLD_EXPT - 1),
-//  then returns q = 2^i * q' such that x - q' * y * 2^i < 2 * y * 2^i,
-//  i.e., x - q * y < 2 * FLOAT_THRESHOLD.
-__device__
-static
-inline
-uint32_t
-quasiQuoNorm(uint32_t x, uint32_t y)
-{
-  int i = __clz(y) - FLOAT_THRESHOLD_NORM_CLZ;
-  return quasiQuo(x, y << i) << i;
-}
- 
-//  Precondition: 2^32 > x, y >= 2^FLOAT_THRESHOLD_EXPT, so 0 <= x / y < 2^FLOAT_THRESHOLD_NORM_CLZ.
-//  Computes quotient q and remainder r for x / y, when x, y >= FLOAT_THRESHOLD.
-__device__
-static
-inline
-uint32_t
-quoRem(uint32_t& r, uint32_t x, uint32_t y)
-{ 
-  uint32_t q = quasiQuo(x, y);
-  r = x - q * y; 
-  if (r >= y)  //  q is too low by 1; correct.
-    r -= y, q += 1;
-  return q; 
-}
-
-template <QuoRemType quoRemType>
-__device__
-static
-inline
-uint32_t
-quoRem(float& r, uint32_t x, uint32_t y)
-{ 
-  uint32_t q = (USE_QUASI_TRANSITION) ? quasiQuoNorm(x, y) : x / y;
-  r = __uint2float_rz(x - q * y);
-  if (USE_QUASI_TRANSITION)
-    q += quoRem<quoRemType>(r, r, __uint2float_rz(y));
-  return q;  
 }
 
 //  Return 1/v (mod m), assuming gcd(m,v) == 1 && m > v > 0.
