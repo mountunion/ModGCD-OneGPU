@@ -35,7 +35,7 @@
 #include <cuda_runtime.h>
 #include "GmpCuda.h"
 
-//  Include the devicesRcpNoCheck definition, which is generated
+//  Include the devicesQuasiQuoRem definition, which is generated
 //  by a configuration script.
 #include "GmpCudaDevice-gcdDevicesQuasiQuoRem.h"
 
@@ -608,8 +608,8 @@ const
 void* 
 GmpCudaDevice::getGcdKernel(char* devName)
 {
-  void* key = bsearch(static_cast<const void*>(devName), static_cast<const void*>(devicesRcpNoCheck), 
-                      sizeof(devicesRcpNoCheck)/sizeof(char*), sizeof(char*), &comparator);
+  void* key = bsearch(static_cast<const void*>(devName), static_cast<const void*>(devicesQuasiQuoRem), 
+                      sizeof(devicesQuasiQuoRem)/sizeof(char*), sizeof(char*), &comparator);
   return reinterpret_cast<const void *>((key == NULL) ? &kernel<false> : &kernel<true>);
 }
 

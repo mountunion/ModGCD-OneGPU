@@ -3,7 +3,7 @@
 //  togethr with any extra devices that are found attached to the system on
 //  which the configuration is executed.
 //  The array needs to be ordered according to strcmp rules.
-static const char* devicesRcpNoCheck[] = 
+static const char* devicesQuasiQuoRem[] = 
 {
   "GeForce GTX 1080",
   "GeForce GTX 980 Ti",
