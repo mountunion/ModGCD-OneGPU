@@ -1,6 +1,6 @@
 /*  certifyQuasiQuoRem.cu
 
-    This program will certify that quasiQuoRem<false>(xf, yf) works correctly, 
+    This program will certify that quasiQuoRem<true>(xf, yf) works correctly, 
     as long as xf and yf are integers and 1 <= xf, yf < 2^22,
     by testing the function on all possible input satisfying the preconditions.
     
@@ -16,13 +16,11 @@
 
 __global__ void kernel(bool* fail)
 {
-  constexpr uint32_t FLOAT_THRESHOLD = 1 << FLOAT_THRESHOLD_EXPT;
-
   for (uint32_t y = blockIdx.x * blockDim.x + threadIdx.x  + 1; y < FLOAT_THRESHOLD; y += blockDim.x * gridDim.x)
     {
       float yf = __uint2float_rz(y);
       
-      //  Now make sure quasiQuoRem<false> satisfies postconditions.
+      //  Now make sure quasiQuoRem<true> satisfies postconditions.
       for (uint32_t x = 1; x < 2 * y; x += 1)
         {
           if (x > 1 && x == y)

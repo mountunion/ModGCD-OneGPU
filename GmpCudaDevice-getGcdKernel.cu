@@ -62,7 +62,6 @@ static constexpr uint64_t MODULUS_MASK = uint64_t{0xFFFFFFFF}; //  Mask for modu
 static constexpr int32_t  MOD_INFINITY = INT32_MIN;            //  Larger than any modulur value
 
 static constexpr int      FLOAT_THRESHOLD_NORM_CLZ  = 32 - FLOAT_THRESHOLD_EXPT;  //  # leading zeros in a normalized denominator.
-static constexpr uint32_t FLOAT_THRESHOLD           = 1 << FLOAT_THRESHOLD_EXPT;
 static constexpr bool     USE_QUASI_TRANSITION      = (CUDA_ARCH < 700);
 static constexpr float    QUASI_QUO_ERR             = 0x1p11f/FLOAT_THRESHOLD;    // == 2^(11 - FLOAT_THRESHOLD_EXPT).
 
@@ -361,7 +360,7 @@ quoRem(uint32_t& r, uint32_t x, uint32_t y)
   return q; 
 }
 
-template <bool CHECK_RCP>
+template <bool QUASI>
 __device__
 static
 inline
@@ -371,7 +370,7 @@ quasiQuoRem(float& r, uint32_t x, uint32_t y)
   uint32_t q = (USE_QUASI_TRANSITION) ? quasiQuoNorm(x, y) : x / y;
   r = __uint2float_rz(x - q * y);
   if (USE_QUASI_TRANSITION)
-    q += quasiQuoRem<CHECK_RCP>(r, r, __uint2float_rz(y));
+    q += quasiQuoRem<QUASI>(r, r, __uint2float_rz(y));
   return q;  
 }
 
@@ -379,7 +378,7 @@ quasiQuoRem(float& r, uint32_t x, uint32_t y)
 //  Based on the extended Euclidean algorithm:
 //  see Knuth, The Art of Computer Programming, vol. 2, 3/e,
 //  Algorithm X on pp342-3.
-template <bool CHECK_RCP>
+template <bool QUASI>
 __device__
 static
 uint32_t
@@ -410,7 +409,7 @@ modInv(uint32_t v, uint32_t m)
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
   //  so we decide which version to use when the compiler compiles to a specific architecture.
   float u3f, v3f = __uint2float_rz(v3);
-  u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, u3, v3);
+  u2 += v2 * quasiQuoRem<QUASI>(u3f, u3, v3);
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
@@ -419,8 +418,8 @@ modInv(uint32_t v, uint32_t m)
   //  If u3f == 0.0, then v3f == 1.0 and |result| is in v2.
   while (u3f > 1.0f)
     {
-      v2 += u2 * quasiQuoRem<CHECK_RCP>(v3f, v3f, u3f);
-      u2 += v2 * quasiQuoRem<CHECK_RCP>(u3f, u3f, v3f);
+      v2 += u2 * quasiQuoRem<QUASI>(v3f, v3f, u3f);
+      u2 += v2 * quasiQuoRem<QUASI>(u3f, u3f, v3f);
     }
       
   bool resultInU = (v3f != 1.0f); 
@@ -432,14 +431,14 @@ modInv(uint32_t v, uint32_t m)
 }
 
 // Calculate u/v mod m, in the range [0,m-1]
-template <bool CHECK_RCP>
+template <bool QUASI>
 __device__
 static
 inline
 uint32_t
 modDiv(uint32_t u, uint32_t v, modulus_t m)
 {
-  return modMul(u, modInv<CHECK_RCP>(v, m.modulus), m);
+  return modMul(u, modInv<QUASI>(v, m.modulus), m);
 }
 
 //  Calculate x mod m for a multiword unsigned integer x.
@@ -491,7 +490,7 @@ getModulus(uint32_t* moduliList)
 }
 
 //  Device kernel for the GmpCudaDevice::getGcdKernel method.
-template <bool CHECK_RCP>
+template <bool QUASI>
 __global__
 static
 void
@@ -517,7 +516,7 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
 
   pair_t pair, myPair;
   myPair.modulus = q.modulus;
-  myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv<CHECK_RCP>(uq, vq, q), q);
+  myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv<QUASI>(uq, vq, q), q);
   postMinPair(myPair, bar);
   collectMinPair(pair, bar);
   
@@ -532,8 +531,8 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
           p = pair.modulus;
           if (p > q.modulus)        //  Bring within range.
             p -= q.modulus;
-          tq = modDiv<CHECK_RCP>(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
-          myPair.value = (tq == 0) ? MOD_INFINITY : toSigned(modDiv<CHECK_RCP>(vq, tq, q), q);
+          tq = modDiv<QUASI>(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
+          myPair.value = (tq == 0) ? MOD_INFINITY : toSigned(modDiv<QUASI>(vq, tq, q), q);
         }
       postMinPair(myPair, bar);
       if (active)
@@ -571,7 +570,7 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
           uint32_t p = pair.modulus;
           if (pair.modulus > q.modulus)  //  Bring within range.
             p -= q.modulus;
-          uq = modDiv<CHECK_RCP>(modSub(uq, fromSigned(pair.value, q), q), p, q);
+          uq = modDiv<QUASI>(modSub(uq, fromSigned(pair.value, q), q), p, q);
           myPair.value = toSigned(uq, q);
         }
       postAnyPairPriorityNonzero(myPair, bar);
@@ -611,6 +610,6 @@ GmpCudaDevice::getGcdKernel(char* devName)
 {
   void* key = bsearch(static_cast<const void*>(devName), static_cast<const void*>(devicesRcpNoCheck), 
                       sizeof(devicesRcpNoCheck)/sizeof(char*), sizeof(char*), &comparator);
-  return reinterpret_cast<const void *>((key == NULL) ? &kernel<true> : &kernel<false>);
+  return reinterpret_cast<const void *>((key == NULL) ? &kernel<false> : &kernel<true>);
 }
 
