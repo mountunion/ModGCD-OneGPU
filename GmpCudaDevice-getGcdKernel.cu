@@ -37,7 +37,7 @@
 
 //  Include the devicesRcpNoCheck definition, which is generated
 //  by a configuration script.
-#include "GmpCudaDevice-gcdDevicesRcpNoCheck.h"
+#include "GmpCudaDevice-gcdDevicesQuasiQuoRem.h"
 
 //  Include the fastReciprocal and quasiQuoRem inline functions,
 //  which are in a separate header file so that quasiQuoRem<false> can be certified
