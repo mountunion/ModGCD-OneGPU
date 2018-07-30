@@ -360,7 +360,7 @@ quoRem(uint32_t& r, uint32_t x, uint32_t y)
   return q; 
 }
 
-template <bool QUASI>
+template <QuoRemType quoRemType>
 __device__
 static
 inline
@@ -370,7 +370,7 @@ quoRem(float& r, uint32_t x, uint32_t y)
   uint32_t q = (USE_QUASI_TRANSITION) ? quasiQuoNorm(x, y) : x / y;
   r = __uint2float_rz(x - q * y);
   if (USE_QUASI_TRANSITION)
-    q += quoRem<QUASI>(r, r, __uint2float_rz(y));
+    q += quoRem<quoRemType>(r, r, __uint2float_rz(y));
   return q;  
 }
 
@@ -378,7 +378,7 @@ quoRem(float& r, uint32_t x, uint32_t y)
 //  Based on the extended Euclidean algorithm:
 //  see Knuth, The Art of Computer Programming, vol. 2, 3/e,
 //  Algorithm X on pp342-3.
-template <bool QUASI>
+template <QuoRemType quoRemType>
 __device__
 static
 uint32_t
@@ -409,7 +409,7 @@ modInv(uint32_t v, uint32_t m)
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
   //  so we decide which version to use when the compiler compiles to a specific architecture.
   float u3f, v3f = __uint2float_rz(v3);
-  u2 += v2 * quoRem<QUASI>(u3f, u3, v3);
+  u2 += v2 * quoRem<quoRemType>(u3f, u3, v3);
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
@@ -418,8 +418,8 @@ modInv(uint32_t v, uint32_t m)
   //  If u3f == 0.0, then v3f == 1.0 and |result| is in v2.
   while (u3f > 1.0f)
     {
-      v2 += u2 * quoRem<QUASI>(v3f, v3f, u3f);
-      u2 += v2 * quoRem<QUASI>(u3f, u3f, v3f);
+      v2 += u2 * quoRem<quoRemType>(v3f, v3f, u3f);
+      u2 += v2 * quoRem<quoRemType>(u3f, u3f, v3f);
     }
       
   bool resultInU = (v3f != 1.0f); 
@@ -431,14 +431,14 @@ modInv(uint32_t v, uint32_t m)
 }
 
 // Calculate u/v mod m, in the range [0,m-1]
-template <bool QUASI>
+template <QuoRemType quoRemType>
 __device__
 static
 inline
 uint32_t
 modDiv(uint32_t u, uint32_t v, modulus_t m)
 {
-  return modMul(u, modInv<QUASI>(v, m.modulus), m);
+  return modMul(u, modInv<quoRemType>(v, m.modulus), m);
 }
 
 //  Calculate x mod m for a multiword unsigned integer x.
@@ -490,7 +490,7 @@ getModulus(uint32_t* moduliList)
 }
 
 //  Device kernel for the GmpCudaDevice::getGcdKernel method.
-template <bool QUASI>
+template <QuoRemType quoRemType>
 __global__
 static
 void
@@ -516,7 +516,7 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
 
   pair_t pair, myPair;
   myPair.modulus = q.modulus;
-  myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv<QUASI>(uq, vq, q), q);
+  myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv<quoRemType>(uq, vq, q), q);
   postMinPair(myPair, bar);
   collectMinPair(pair, bar);
   
@@ -531,8 +531,8 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
           p = pair.modulus;
           if (p > q.modulus)        //  Bring within range.
             p -= q.modulus;
-          tq = modDiv<QUASI>(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
-          myPair.value = (tq == 0) ? MOD_INFINITY : toSigned(modDiv<QUASI>(vq, tq, q), q);
+          tq = modDiv<quoRemType>(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
+          myPair.value = (tq == 0) ? MOD_INFINITY : toSigned(modDiv<quoRemType>(vq, tq, q), q);
         }
       postMinPair(myPair, bar);
       if (active)
@@ -570,7 +570,7 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
           uint32_t p = pair.modulus;
           if (pair.modulus > q.modulus)  //  Bring within range.
             p -= q.modulus;
-          uq = modDiv<QUASI>(modSub(uq, fromSigned(pair.value, q), q), p, q);
+          uq = modDiv<quoRemType>(modSub(uq, fromSigned(pair.value, q), q), p, q);
           myPair.value = toSigned(uq, q);
         }
       postAnyPairPriorityNonzero(myPair, bar);
@@ -602,13 +602,13 @@ comparator(const void* s1, const void* s2Ptr)
 }
 
 //  Return the appropriate gcd kernel for a device to use, based on
-//  whether the device supports a QUASI quoRem.
+//  whether the device supports quoRem<QUASI>.
 const 
 void* 
 GmpCudaDevice::getGcdKernel(char* devName)
 {
   void* key = bsearch(static_cast<const void*>(devName), static_cast<const void*>(devicesQuasiQuoRem), 
                       sizeof(devicesQuasiQuoRem)/sizeof(char*), sizeof(char*), &comparator);
-  return reinterpret_cast<const void *>((key == NULL) ? &kernel<false> : &kernel<true>);
+  return reinterpret_cast<const void *>((key == NULL) ? &kernel<EXACT> : &kernel<QUASI>);
 }
 

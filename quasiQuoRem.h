@@ -7,6 +7,8 @@
 
 */
 
+typedef enum {QUASI, EXACT} QuoRemType;
+
 // Defines range of valid input for quasiQuoRem.
 static constexpr int      FLOAT_THRESHOLD_EXPT = 22;
 static constexpr uint32_t FLOAT_THRESHOLD      = 1 << FLOAT_THRESHOLD_EXPT;
@@ -29,17 +31,17 @@ fastReciprocal(float y)
 //    0 < x < RCP_THRESHOLD * 2
 //    0 < y < RCP_THRESHOLD
 //    if x > 1, then x != y.
-template <bool QUASI>
+template <QuoRemType quoRemType>
 __device__
 static
 inline
 uint32_t
 quoRem(float& r, float x, float y)
 {
-  constexpr float ERR = (QUASI) ? 0.0f : 0.25f ;
+  constexpr float ERR = (quoRemType == QUASI) ? 0.0f : 0.25f ;
   float q = truncf(__fmaf_rz(x, fastReciprocal(y), -ERR));
   r = __fmaf_rz(q, -y, x); 
-  if (!QUASI && r >= y)
+  if (quoRemType == EXACT && r >= y)
     r -= y, q += 1.0f;
   return __float2uint_rz(q);
 }

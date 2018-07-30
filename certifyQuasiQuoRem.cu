@@ -1,6 +1,6 @@
 /*  certifyQuasiQuoRem.cu
 
-    This program will certify that quoRem<true>(xf, yf) works correctly, 
+    This program will certify that quoRem<QUASI>(xf, yf) works correctly, 
     as long as xf and yf are integers and 1 <= xf, yf < 2^22,
     by testing the function on all possible input satisfying the preconditions.
     
@@ -20,13 +20,13 @@ __global__ void kernel(bool* fail)
     {
       float yf = __uint2float_rz(y);
       
-      //  Now make sure quoRem<true> satisfies postconditions.
+      //  Now make sure quoRem<QUASI> satisfies postconditions.
       for (uint32_t x = 1; x < 2 * y; x += 1)
         {
           if (x > 1 && x == y)
             continue;
           float xf = __uint2float_rz(x);
-          float qf = quoRem<true>(xf, xf, yf);
+          float qf = quoRem<QUASI>(xf, xf, yf);
           if (yf > xf && xf >= 0.0f)
             continue;
           *fail = true;
@@ -36,7 +36,7 @@ __global__ void kernel(bool* fail)
       for (uint32_t x = 2 * y; x < 2 * FLOAT_THRESHOLD; x += 1)
         {
           float xf = __uint2float_rz(x);
-          float qf = quoRem<true>(xf, xf, yf);
+          float qf = quoRem<QUASI>(xf, xf, yf);
           if (yf2 > xf && xf >= 0.0f)
             continue;
           *fail = true;
