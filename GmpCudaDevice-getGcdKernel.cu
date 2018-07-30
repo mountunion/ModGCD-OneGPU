@@ -607,8 +607,8 @@ const
 void* 
 GmpCudaDevice::getGcdKernel(char* devName)
 {
-  void* key = bsearch(static_cast<const void*>(devName), static_cast<const void*>(devicesQuasiQuoRem), 
-                      sizeof(devicesQuasiQuoRem)/sizeof(char*), sizeof(char*), &comparator);
+  void* key = bsearch(static_cast<const void*>(devName), static_cast<const void*>(devicesQuoRemQuasi), 
+                      sizeof(devicesQuoRemQuasi)/sizeof(char*), sizeof(char*), &comparator);
   return reinterpret_cast<const void *>((key == NULL) ? &kernel<EXACT> : &kernel<QUASI>);
 }
 
