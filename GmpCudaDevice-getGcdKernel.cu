@@ -39,8 +39,8 @@
 //  by a configuration script.
 #include "GmpCudaDevice-gcdDevicesQuasiQuoRem.h"
 
-//  Include the fastReciprocal and quasiQuoRem inline functions,
-//  which are in a separate header file so that quasiQuoRem<false> can be certified
+//  Include the fastReciprocal and quoRem inline functions,
+//  which are in a separate header file so that quoRem<false> can be certified
 //  for use on specific devices.
 #include "quasiQuoRem.h"
 
@@ -365,12 +365,12 @@ __device__
 static
 inline
 uint32_t
-quasiQuoRem(float& r, uint32_t x, uint32_t y)
+quoRem(float& r, uint32_t x, uint32_t y)
 { 
   uint32_t q = (USE_QUASI_TRANSITION) ? quasiQuoNorm(x, y) : x / y;
   r = __uint2float_rz(x - q * y);
   if (USE_QUASI_TRANSITION)
-    q += quasiQuoRem<QUASI>(r, r, __uint2float_rz(y));
+    q += quoRem<QUASI>(r, r, __uint2float_rz(y));
   return q;  
 }
 
@@ -409,7 +409,7 @@ modInv(uint32_t v, uint32_t m)
   //  the true quotient), the true quotient is about as fast as the quasi-quotient,
   //  so we decide which version to use when the compiler compiles to a specific architecture.
   float u3f, v3f = __uint2float_rz(v3);
-  u2 += v2 * quasiQuoRem<QUASI>(u3f, u3, v3);
+  u2 += v2 * quoRem<QUASI>(u3f, u3, v3);
    
   //  When u3 and v3 are both small enough, divide with floating point hardware.   
   //  At this point v3f > u3f.
@@ -418,8 +418,8 @@ modInv(uint32_t v, uint32_t m)
   //  If u3f == 0.0, then v3f == 1.0 and |result| is in v2.
   while (u3f > 1.0f)
     {
-      v2 += u2 * quasiQuoRem<QUASI>(v3f, v3f, u3f);
-      u2 += v2 * quasiQuoRem<QUASI>(u3f, u3f, v3f);
+      v2 += u2 * quoRem<QUASI>(v3f, v3f, u3f);
+      u2 += v2 * quoRem<QUASI>(u3f, u3f, v3f);
     }
       
   bool resultInU = (v3f != 1.0f); 
@@ -593,7 +593,7 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
     buf[0] = pairs - reinterpret_cast<pair_t*>(buf);   
 }
 
-//  Used to find a device name in devicesRcpNoCheck.
+//  Used to find a device name in devicesQuasiQuoRem.
 static 
 int 
 comparator(const void* s1, const void* s2Ptr)
@@ -602,8 +602,7 @@ comparator(const void* s1, const void* s2Ptr)
 }
 
 //  Return the appropriate gcd kernel for a device to use, based on
-//  whether there needs to be a check performed after the rcp.approx reciprocal
-//  in quasiQuoRem.
+//  whether the device supports a QUASI quoRem.
 const 
 void* 
 GmpCudaDevice::getGcdKernel(char* devName)

@@ -11,7 +11,6 @@
 static constexpr int      FLOAT_THRESHOLD_EXPT = 22;
 static constexpr uint32_t FLOAT_THRESHOLD      = 1 << FLOAT_THRESHOLD_EXPT;
 
-
 __device__
 static
 inline
@@ -35,7 +34,7 @@ __device__
 static
 inline
 uint32_t
-quasiQuoRem(float& r, float x, float y)
+quoRem(float& r, float x, float y)
 {
   constexpr float ERR = (QUASI) ? 0.0f : 0.25f ;
   float q = truncf(__fmaf_rz(x, fastReciprocal(y), -ERR));
