@@ -39,8 +39,8 @@
 //  by a configuration script.
 #include "GmpCudaDevice-gcdDevicesQuoRemQuasi.h"
 
-//  Include the fastReciprocal and quoRem inline functions,
-//  which are in a separate header file so that quoRem<false> can be certified
+//  Include the quoRem inline functions,
+//  which are in a separate header file so that quoRem<QUASI> can be certified
 //  for use on specific devices.
 #include "quoRem.h"
 

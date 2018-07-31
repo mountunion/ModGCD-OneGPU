@@ -1,9 +1,9 @@
-/*  certifyQuasiQuoRem.cu
+/*  certifyQuoRemQuasi.cu
 
     This program will certify that quoRem<QUASI>(xf, yf) works correctly, 
-    as long as xf and yf are integers and 0 <= xf < 2 * FLOAT_THRESHOLD, 
-    1 <= yf < FLOAT_THRESHOLD,
-    by testing the function on all possible input satisfying the preconditions.
+    as long as xf and yf are integers, 1 <= xf < 2 * FLOAT_THRESHOLD, 
+    and 1 <= yf < FLOAT_THRESHOLD, by testing the function on all possible 
+    input satisfying the preconditions.
     
     K. Weber
     20-July, 2018.

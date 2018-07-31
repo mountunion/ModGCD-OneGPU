@@ -12,8 +12,6 @@ typedef enum {QUASI, EXACT} QuoRemType;
 // Defines range of valid input for quasiQuoRem.
 static constexpr int      FLOAT_THRESHOLD_EXPT = 22;
 static constexpr uint32_t FLOAT_THRESHOLD      = 1 << FLOAT_THRESHOLD_EXPT;
-static constexpr int      FLOAT_THRESHOLD_NORM_CLZ  = 32 - FLOAT_THRESHOLD_EXPT;  //  # leading zeros in a normalized denominator.
-static constexpr float    QUASI_QUO_ERR             = 0x1p11f/FLOAT_THRESHOLD;    // == 2^(11 - FLOAT_THRESHOLD_EXPT).
 
 __device__
 static
@@ -40,8 +38,8 @@ inline
 uint32_t
 quoRem(float& r, float x, float y)
 {
-  constexpr float ERR = (quoRemType == QUASI) ? 0.0f : 0.25f ;
-  float q = truncf(__fmaf_rz(x, fastReciprocal(y), -ERR));
+  constexpr float ERR = (quoRemType == QUASI) ? 0.0f : -0.25f ;
+  float q = truncf(__fmaf_rz(x, fastReciprocal(y), ERR));
   r = __fmaf_rz(q, -y, x); 
   if (quoRemType == EXACT && r >= y)
     r -= y, q += 1.0f;
@@ -61,6 +59,7 @@ inline
 uint32_t
 quasiQuo(uint32_t x, uint32_t y)
 { 
+  constexpr float QUASI_QUO_ERR = 0x1p11f/FLOAT_THRESHOLD;    // == 2^(11 - FLOAT_THRESHOLD_EXPT).
   return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_ru(y)), -QUASI_QUO_ERR));
 }
 
@@ -74,7 +73,7 @@ inline
 uint32_t
 quasiQuoNorm(uint32_t x, uint32_t y)
 {
-  int i = __clz(y) - FLOAT_THRESHOLD_NORM_CLZ;
+  int i = __clz(y) - (32 - FLOAT_THRESHOLD_EXPT);
   return quasiQuo(x, y << i) << i;
 }
  
@@ -100,19 +99,14 @@ inline
 uint32_t
 quoRem(float& r, uint32_t x, uint32_t y)
 { 
-//  Make the cuda architecture number available as a constexpr for all compilation phases.
-  constexpr int CUDA_ARCH =
 #ifdef __CUDA_ARCH__
-  __CUDA_ARCH__
-#else
-  -1
-#endif
-  ;
-  constexpr bool USE_QUASI_TRANSITION = (CUDA_ARCH < 700);
-  
-  uint32_t q = (USE_QUASI_TRANSITION) ? quasiQuoNorm(x, y) : x / y;
+  constexpr bool USE_QUASI_TRANSITION = (__CUDA_ARCH__ < 700);
+  uint32_t q =  (USE_QUASI_TRANSITION) ? quasiQuoNorm(x, y) : x / y;
   r = __uint2float_rz(x - q * y);
   if (USE_QUASI_TRANSITION)
     q += quoRem<quoRemType>(r, r, __uint2float_rz(y));
   return q;  
+#else
+  return 0;  //  Processed during host code compilation phase.
+#endif  
 }
