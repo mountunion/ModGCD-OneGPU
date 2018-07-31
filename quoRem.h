@@ -38,7 +38,7 @@ inline
 uint32_t
 quoRem(float& r, float x, float y)
 {
-  constexpr float ERR = (quoRemType == QUASI) ? 0.0f : -0.25f ;
+  constexpr float ERR = (quoRemType == QUASI) ? 0.0f : -(FLOAT_THRESHOLD/0x1p24f);
   float q = truncf(__fmaf_rz(x, fastReciprocal(y), ERR));
   r = __fmaf_rz(q, -y, x); 
   if (quoRemType == EXACT && r >= y)
@@ -59,8 +59,8 @@ inline
 uint32_t
 quasiQuo(uint32_t x, uint32_t y)
 { 
-  constexpr float QUASI_QUO_ERR = 0x1p11f/FLOAT_THRESHOLD;    // == 2^(11 - FLOAT_THRESHOLD_EXPT).
-  return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_ru(y)), -QUASI_QUO_ERR));
+  constexpr float ERR = -(0x1p11f/FLOAT_THRESHOLD);    // == 2^(11 - FLOAT_THRESHOLD_EXPT).
+  return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_ru(y)), ERR));
 }
 
 //  Assumes x >= FLOAT_THRESHOLD > y. (Recall that FLOAT_THRESHOLD == 2^FLOAT_THRESHOLD_EXPT.)
