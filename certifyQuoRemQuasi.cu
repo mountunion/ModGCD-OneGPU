@@ -15,34 +15,42 @@
 #include <cstdint>
 #include "quoRem.h"
 
+__device__ inline void checkRange(bool* fail, uint32_t xInit, uint32_t xLimit, float yf, float limit)
+{
+  for (uint32_t x = xInit; x < xLimit; x += 1)
+    {
+      float rf;
+      float qf = quoRem<QUASI>(rf, __uint2float_rz(x), yf);
+      if (0.0f <= rf && rf < limit)
+        continue;
+      *fail = true;
+      printf("Failed for x == %u and yf == %f: qf == %f, rf = %f\n", x, yf, qf, rf);
+    }
+}
+
 __global__ void kernel(bool* fail)
 {
-  for (uint32_t y = blockIdx.x * blockDim.x + threadIdx.x  + 1; y < FLOAT_THRESHOLD; y += blockDim.x * gridDim.x)
+  //  Check y == 1 first. (Possibly not necessary--analysis indicates it should always be OK.)
+  float yf = __uint2float_rz(1);
+  for (uint32_t x = blockIdx.x * blockDim.x + threadIdx.x  + 1; x < 2 *FLOAT_THRESHOLD; x += blockDim.x * gridDim.x)
     {
-      float yf = __uint2float_rz(y);
-      
+      float rf;
+      float qf = quoRem<QUASI>(rf, __uint2float_rz(x), yf);
+      if (rf == 0.0f)
+        continue;
+      *fail = true;
+      printf("Failed for x == %u and yf == %f: qf == %f, rf = %f\n", x, yf, qf, rf);
+    }
+  //  Now test all divisors 1 < y < FLOAT_THRESHOLD.
+  for (uint32_t y = blockIdx.x * blockDim.x + threadIdx.x + 2; y < FLOAT_THRESHOLD; y += blockDim.x * gridDim.x)
+    {
+      yf = __uint2float_rz(y);
       //  Now make sure quoRem<QUASI> satisfies postconditions.
-      for (uint32_t x = 1; x < 2 * y; x += 1)
-        {
-          if (x > 1 && x == y)
-            continue;
-          float xf = __uint2float_rz(x);
-          float qf = quoRem<QUASI>(xf, xf, yf);
-          if (yf > xf && xf >= 0.0f)
-            continue;
-          *fail = true;
-          printf("Failed for x == %u and y == %u: qf == %f, xf = %f\n", x, y, qf, xf);
-        }
-      float yf2 = yf + yf;
-      for (uint32_t x = 2 * y; x < 2 * FLOAT_THRESHOLD; x += 1)
-        {
-          float xf = __uint2float_rz(x);
-          float qf = quoRem<QUASI>(xf, xf, yf);
-          if (yf2 > xf && xf >= 0.0f)
-            continue;
-          *fail = true;
-          printf("Failed for x == %u and y == %u: qf == %f, xf = %f\n", x, y, qf, xf);
-        }
+      // for 1 <= x < 2 * y && x != y, then 0 <= rf < yf.
+      checkRange(fail, 1,         y, yf, yf); // Possibly not necessary--analysis indicates it should always be OK.
+      checkRange(fail, y + 1, 2 * y, yf, yf); // Possibly not necessary--analysis indicates it should always be OK.
+      // for 2 * y <= x < 2 * FLOAT_THRESHOLD, then 0 <= rf < 2 * yf.
+      checkRange(fail, 2 * y, 2 * FLOAT_THRESHOLD, yf, 2 * yf);  // Necessary.  Analysis indicates q could be too high.
     }
 }
 
