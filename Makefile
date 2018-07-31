@@ -64,10 +64,10 @@ testmodgcd-nogpu: testmodgcd.cpp GmpCuda.h
 ##
 ##  Target to certify quoRem<QUASI> works on specific device.
 ##
-certifyQuasiQuoRem: certifyQuasiQuoRem.o
+certifyQuoRemQuasi: certifyQuoRemQuasi.o
 	$(LD) -Xcompiler -static-libstdc++ $(LDFLAGS) $^ -o $@
 
-certifyQuasiQuoRem.o: certifyQuasiQuoRem.cu quoRem.h
+certifyQuoRemQuasi.o: certifyQuoRemQuasi.cu quoRem.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $<
 
 testmodgcd.o: testmodgcd.cpp GmpCuda.h
