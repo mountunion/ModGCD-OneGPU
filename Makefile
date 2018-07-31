@@ -62,12 +62,12 @@ testmodgcd-nogpu: testmodgcd.cpp GmpCuda.h
 	$(CXX) $(CXXFLAGS) -DNO_GPU $< -o $@ $(GMPL)
 	
 ##
-##  Target to certify quasiQuoRem works on specific device.
+##  Target to certify quoRem<QUASI> works on specific device.
 ##
 certifyQuasiQuoRem: certifyQuasiQuoRem.o
 	$(LD) -Xcompiler -static-libstdc++ $(LDFLAGS) $^ -o $@
 
-certifyQuasiQuoRem.o: certifyQuasiQuoRem.cu quasiQuoRem.h
+certifyQuasiQuoRem.o: certifyQuasiQuoRem.cu quoRem.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $<
 
 testmodgcd.o: testmodgcd.cpp GmpCuda.h
@@ -82,10 +82,10 @@ GmpCudaDevice.o: GmpCudaDevice.cu GmpCuda.h
 GmpCudaDevice-gcd.o: GmpCudaDevice-gcd.cu GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -c $<
 
-GmpCudaDevice-getGcdKernel.o: GmpCudaDevice-getGcdKernel.cu GmpCudaDevice-gcdDevicesQuoRemQuasi.h quasiQuoRem.h GmpCuda.h
+GmpCudaDevice-getGcdKernel.o: GmpCudaDevice-getGcdKernel.cu GmpCudaDevice-gcdDevicesQuoRemQuasi.h quoRem.h GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) $(GCD_KERN_FLAGS) -c $<
 
-GmpCudaDevice-getGcdKernel-coop-gps.o: GmpCudaDevice-getGcdKernel.cu GmpCudaDevice-gcdDevicesQuoRemQuasi.h quasiQuoRem.h GmpCuda.h
+GmpCudaDevice-getGcdKernel-coop-gps.o: GmpCudaDevice-getGcdKernel.cu GmpCudaDevice-gcdDevicesQuoRemQuasi.h quoRem.h GmpCuda.h
 	$(NVCC) $(NVCCFLAGS) -DUSE_COOP_GROUPS $(GCD_KERN_FLAGS) -c $< -o $@
 
 createModuli: createModuli.cpp GmpCuda.h

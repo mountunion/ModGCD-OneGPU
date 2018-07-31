@@ -1,7 +1,8 @@
 /*  certifyQuasiQuoRem.cu
 
     This program will certify that quoRem<QUASI>(xf, yf) works correctly, 
-    as long as xf and yf are integers and 1 <= xf, yf < 2^22,
+    as long as xf and yf are integers and 0 <= xf < 2 * FLOAT_THRESHOLD, 
+    1 <= yf < FLOAT_THRESHOLD,
     by testing the function on all possible input satisfying the preconditions.
     
     K. Weber
@@ -12,7 +13,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdint>
-#include "quasiQuoRem.h"
+#include "quoRem.h"
 
 __global__ void kernel(bool* fail)
 {

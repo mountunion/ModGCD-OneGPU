@@ -42,7 +42,7 @@
 //  Include the fastReciprocal and quoRem inline functions,
 //  which are in a separate header file so that quoRem<false> can be certified
 //  for use on specific devices.
-#include "quasiQuoRem.h"
+#include "quoRem.h"
 
 using namespace GmpCuda;
 
