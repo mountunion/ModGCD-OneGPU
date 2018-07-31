@@ -87,14 +87,14 @@ quoRem(float& r, uint32_t x, uint32_t y)
 { 
 #ifdef __CUDA_ARCH__
   uint32_t q;
-  if (__CUDA_ARCH__ < 700)
+  if (__CUDA_ARCH__ < 700)  // float reciprocal faster.
     {
       int i = __clz(y) - (32 - FLOAT_THRESHOLD_EXPT);
       q = quasiQuo(x, y << i) << i;
       r = __uint2float_rz(x - q * y);
       q += quoRem<quoRemType>(r, r, __uint2float_rz(y));
     }
-  else
+  else                      //  int division faster.
     {
       q = x / y;
       r = __uint2float_rz(x - q * y);
