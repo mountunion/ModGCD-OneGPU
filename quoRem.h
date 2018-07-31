@@ -62,20 +62,6 @@ quasiQuo(uint32_t x, uint32_t y)
   constexpr float ERR = -(0x1p11f/FLOAT_THRESHOLD);    // == 2^(11 - FLOAT_THRESHOLD_EXPT).
   return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_ru(y)), ERR));
 }
-
-//  Assumes x >= FLOAT_THRESHOLD > y. (Recall that FLOAT_THRESHOLD == 2^FLOAT_THRESHOLD_EXPT.)
-//  First computes i such that 2^FLOAT_THRESHOLD_EXPT > y * 2^i >= 2^(FLOAT_THRESHOLD_EXPT - 1),
-//  then returns q = 2^i * q' such that x - q' * y * 2^i < 2 * y * 2^i,
-//  i.e., x - q * y < 2 * FLOAT_THRESHOLD.
-__device__
-static
-inline
-uint32_t
-quasiQuoNorm(uint32_t x, uint32_t y)
-{
-  int i = __clz(y) - (32 - FLOAT_THRESHOLD_EXPT);
-  return quasiQuo(x, y << i) << i;
-}
  
 //  Precondition: 2^32 > x, y >= 2^FLOAT_THRESHOLD_EXPT, so 0 <= x / y < 2^FLOAT_THRESHOLD_NORM_CLZ.
 //  Computes quotient q and remainder r for x / y, when x, y >= FLOAT_THRESHOLD.
@@ -100,13 +86,21 @@ uint32_t
 quoRem(float& r, uint32_t x, uint32_t y)
 { 
 #ifdef __CUDA_ARCH__
-  constexpr bool USE_QUASI_TRANSITION = (__CUDA_ARCH__ < 700);
-  uint32_t q =  (USE_QUASI_TRANSITION) ? quasiQuoNorm(x, y) : x / y;
-  r = __uint2float_rz(x - q * y);
-  if (USE_QUASI_TRANSITION)
-    q += quoRem<quoRemType>(r, r, __uint2float_rz(y));
-  return q;  
+  uint32_t q;
+  if (__CUDA_ARCH__ < 700)
+    {
+      int i = __clz(y) - (32 - FLOAT_THRESHOLD_EXPT);
+      q = quasiQuo(x, y << i) << i;
+      r = __uint2float_rz(x - q * y);
+      q += quoRem<quoRemType>(r, r, __uint2float_rz(y));
+    }
+  else
+    {
+      q = x / y;
+      r = __uint2float_rz(x - q * y);
+    }
+  return q; 
 #else
-  return 0;  //  Processed during host code compilation phase.
-#endif  
+  return 0; //  Processed during host code compilation phase.
+#endif
 }
