@@ -31,17 +31,17 @@ fastReciprocal(float y)
 //    0 < x < RCP_THRESHOLD * 2
 //    0 < y < RCP_THRESHOLD
 //    if x > 1, then x != y.
-template <QuoRemType quoRemType>
+template <QuoRemType QRTYPE>
 __device__
 static
 inline
 uint32_t
 quoRem(float& r, float x, float y)
 {
-  constexpr float ERR = (quoRemType == QUASI) ? 0.0f : -(FLOAT_THRESHOLD/0x1p24f);
+  constexpr float ERR = (QRTYPE == QUASI) ? 0.0f : -(FLOAT_THRESHOLD/0x1p24f);
   float q = truncf(__fmaf_rz(x, fastReciprocal(y), ERR));
   r = __fmaf_rz(q, -y, x); 
-  if (quoRemType == EXACT && r >= y)
+  if (QRTYPE == EXACT && r >= y)
     r -= y, q += 1.0f;
   return __float2uint_rz(q);
 }
@@ -78,7 +78,7 @@ quoRem(uint32_t& r, uint32_t x, uint32_t y)
   return q; 
 }
 
-template <QuoRemType quoRemType>
+template <QuoRemType QRTYPE>
 __device__
 static
 inline
@@ -92,7 +92,7 @@ quoRem(float& r, uint32_t x, uint32_t y)
       int i = __clz(y) - (32 - FLOAT_THRESHOLD_EXPT);
       q = quasiQuo(x, y << i) << i;
       r = __uint2float_rz(x - q * y);
-      q += quoRem<quoRemType>(r, r, __uint2float_rz(y));
+      q += quoRem<QRTYPE>(r, r, __uint2float_rz(y));
     }
   else                      //  int division faster.
     {
