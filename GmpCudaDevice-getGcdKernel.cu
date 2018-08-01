@@ -519,14 +519,6 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
     buf[0] = pairs - reinterpret_cast<pair_t*>(buf);   
 }
 
-//  Used to find a device name in devicesQuasiQuoRem.
-static 
-int 
-comparator(const void* s1, const void* s2Ptr)
-{
-  return strcmp(static_cast<const char*>(s1), *static_cast<char * const *>(s2Ptr));
-}
-
 __global__
 static
 void
@@ -541,9 +533,16 @@ const
 void* 
 GmpCudaDevice::getGcdKernel(char* devName)
 {
-  void* key = bsearch(static_cast<const void*>(devName), static_cast<const void*>(devicesQuoRemQuasi), 
-                      sizeof(devicesQuoRemQuasi)/sizeof(char*), sizeof(char*), &comparator);
-  if (key != NULL)
+  void* ptr = bsearch(static_cast<const void*>(devName), 
+                      static_cast<const void*>(devicesQuoRemQuasi), 
+                      sizeof(devicesQuoRemQuasi)/sizeof(char*), 
+                      sizeof(char*),
+                      [](const void* s1, const void* s2Ptr) -> int
+                        {
+                          return strcmp(static_cast<const char*>(s1), *static_cast<char * const *>(s2Ptr));
+                        }
+                     );
+  if (ptr != NULL)
     return reinterpret_cast<const void *>(&kernel<QUASI>);
 
   bool pass = false;
