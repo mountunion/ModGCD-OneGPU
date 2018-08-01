@@ -544,11 +544,9 @@ GmpCudaDevice::getGcdKernel(char* devName)
                      );
   if (ptr != NULL)
     return reinterpret_cast<const void *>(&kernel<QUASI>);
-
-  bool pass = false;
   bool* globalPass;
+  bool pass;
   assert(cudaSuccess == cudaMalloc(&globalPass, sizeof(pass)));
-  assert(cudaSuccess == cudaMemcpy(globalPass, &pass, sizeof(pass), cudaMemcpyHostToDevice));
   checkFastReciprocal<<<1,1>>>(globalPass);
   assert(cudaSuccess == cudaDeviceSynchronize());
   assert(cudaSuccess == cudaMemcpy(&pass, globalPass, sizeof(pass), cudaMemcpyDeviceToHost));

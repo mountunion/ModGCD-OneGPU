@@ -4,6 +4,8 @@
     the long division xf = quotient * yf + remainder.
     
     K. Weber
+    
+    1-Aug-2018.
 
 */
 
@@ -24,13 +26,16 @@ fastReciprocal(float y)
   return r;
 }
 
-//  quasiQuoRem computes a quasi-quotient q and quasi-remainder r = x - q * y
-//  such that 0 <= r < 2 * y.
+//  quasiQuoRem computes a quasi-quotient q and quasi-remainder r.
 //  Preconditions: 
 //    x and y are integers
 //    0 < x < RCP_THRESHOLD * 2
 //    0 < y < RCP_THRESHOLD
-//    if x > 1, then x != y.
+//    y != x when x > 1.
+//  Postconditions:
+//    0.0f <= r < y     when 0     <  x < y * 2
+//    0.0f <= r < y * 2 when y * 2 <= x < FLOAT_THRESHOLD * 2
+//    x == q * y + r
 //  NOTE: error analysis depends on fastReciprocal(1.0f) == 1.0f and fastReciprocal(2.0f) == 0.5f exactly.
 template <QuoRemType QRTYPE>
 __device__

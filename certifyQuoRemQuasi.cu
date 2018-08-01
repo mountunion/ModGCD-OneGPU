@@ -3,7 +3,7 @@
     This program will certify that quoRem<QUASI>(rf, xf, yf) works correctly.
     Preconditions: 
       xf and yf are integers
-      xf == yf == 1.0f || xf != yf
+      yf != xf when xf > 1.
       1 <= xf < FLOAT_THRESHOLD * 2
       1 <= yf < FLOAT_THRESHOLD
     Postcondition tested:
