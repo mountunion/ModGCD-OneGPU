@@ -31,6 +31,7 @@ fastReciprocal(float y)
 //    0 < x < RCP_THRESHOLD * 2
 //    0 < y < RCP_THRESHOLD
 //    if x > 1, then x != y.
+//  NOTE: error analysis depends on fastReciprocal(1.0f) == 1.0f and fastReciprocal(2.0f) == 0.5f exactly.
 template <QuoRemType QRTYPE>
 __device__
 static
@@ -45,12 +46,15 @@ quoRem(float& r, float x, float y)
     r -= y, q += 1.0f;
   return __float2uint_rz(q);
 }
-//  Computes a "quasi" quotient for x / y, when x, y >= FLOAT_THRESHOLD/2.
+
+//  Computes a "quasi" quotient for x / y, 
+//  when x > FLOAT_THRESHOLD && y >= FLOAT_THRESHOLD/2.
 //  Approximation could be too small by 1.
 //  The floating point calculation of x/y from multiplying 
-//  by the reciprocal here could be too high by as much as QUASI_QUO_ERR
-//  and too low by as much as 2^(-1) + 2^(-13) + QUASI_QUO_ERR (slight overestimate);
-//  make it always too low, by subtracting QUASI_QUO_ERR.  
+//  by the reciprocal here could be too high by as much as 
+//  ERR == 2^(11 - FLOAT_THRESHOLD_EXPT),
+//  and too low by as much as 2^(-1) + 2^(-13) + ERR (slight overestimate);
+//  make it always too low, by subtracting ERR.  
 //  Then obtain  quasi-quotient by truncating toward zero.
 //  The quasi-quotient could either be OK or too low by 1.
 __device__
@@ -59,12 +63,12 @@ inline
 uint32_t
 quasiQuo(uint32_t x, uint32_t y)
 { 
-  constexpr float ERR = -(0x1p11f/FLOAT_THRESHOLD);    // == 2^(11 - FLOAT_THRESHOLD_EXPT).
+  constexpr float ERR = -(0x1p11f/FLOAT_THRESHOLD);
   return __float2uint_rz(__fmaf_rz(__uint2float_rz(x), fastReciprocal(__uint2float_ru(y)), ERR));
 }
  
-//  Precondition: 2^32 > x, y >= 2^FLOAT_THRESHOLD_EXPT, so 0 <= x / y < 2^FLOAT_THRESHOLD_NORM_CLZ.
-//  Computes quotient q and remainder r for x / y, when x, y >= FLOAT_THRESHOLD.
+//  Computes quotient q and remainder r for x / y, 
+//  when x > FLOAT_THRESHOLD && y >= FLOAT_THRESHOLD/2.
 __device__
 static
 inline
