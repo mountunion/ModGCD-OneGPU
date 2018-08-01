@@ -3,7 +3,7 @@
     This program will certify that quoRem<QUASI>(rf, xf, yf) works correctly.
     Preconditions: 
       xf and yf are integers
-      if xf > 1.0 and yf > 1.0, then xf != yf
+      xf == yf == 1.0f || xf != yf
       1 <= xf < FLOAT_THRESHOLD * 2
       1 <= yf < FLOAT_THRESHOLD
     Postcondition tested:
@@ -38,12 +38,10 @@ __device__ inline void checkRange(bool* fail, uint32_t xInit, uint32_t xLimit, f
 
 __global__ void kernel(bool* fail)
 {
-  //  Now test all divisors 1 < y < FLOAT_THRESHOLD.
   for (uint32_t y = blockIdx.x * blockDim.x + threadIdx.x + 1; y < FLOAT_THRESHOLD; y += blockDim.x * gridDim.x)
     {
       float yf = __uint2float_rz(y);
-      //  Now make sure quoRem<QUASI> satisfies postconditions.
-      checkRange(fail, 1, max(y, 2), yf, yf);  //  Checks quoRem<QUASI>(rf, 1.0f, 1.0f).
+      checkRange(fail, 1, max(y, 2), yf, yf); //  Will include check for quoRem<QUASI>(rf, 1.0f, 1.0f).
       checkRange(fail, y + 1, y * 2, yf, yf);
       checkRange(fail, y * 2, FLOAT_THRESHOLD * 2, yf, 2 * yf);
     }
