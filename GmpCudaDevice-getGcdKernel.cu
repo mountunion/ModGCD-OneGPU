@@ -527,14 +527,33 @@ comparator(const void* s1, const void* s2Ptr)
   return strcmp(static_cast<const char*>(s1), *static_cast<char * const *>(s2Ptr));
 }
 
+__global__
+static
+void
+checkFastReciprocal(bool* pass)
+{
+  *pass = (fastReciprocal(1.0f) == 1.0f && fastReciprocal(2.0f) == 0.5f);
+}
+
 //  Return the appropriate gcd kernel for a device to use, based on
-//  whether the device supports quoRem<QUASI>.
+//  whether the device supports quoRem<QUASI>, quoRem<FAST_EXACT>, or quoRem<SAFE_EXACT>.
 const 
 void* 
 GmpCudaDevice::getGcdKernel(char* devName)
 {
   void* key = bsearch(static_cast<const void*>(devName), static_cast<const void*>(devicesQuoRemQuasi), 
                       sizeof(devicesQuoRemQuasi)/sizeof(char*), sizeof(char*), &comparator);
-  return reinterpret_cast<const void *>((key == NULL) ? &kernel<EXACT> : &kernel<QUASI>);
+  if (key != NULL)
+    return reinterpret_cast<const void *>(&kernel<QUASI>);
+
+  bool pass = false;
+  bool* globalPass;
+  assert(cudaSuccess == cudaMalloc(&globalPass, sizeof(pass)));
+  assert(cudaSuccess == cudaMemcpy(globalPass, &pass, sizeof(pass), cudaMemcpyHostToDevice));
+  checkFastReciprocal<<<1,1>>>(globalPass);
+  assert(cudaSuccess == cudaDeviceSynchronize());
+  assert(cudaSuccess == cudaMemcpy(&pass, globalPass, sizeof(pass), cudaMemcpyDeviceToHost));
+  assert(cudaSuccess == cudaFree(globalPass));
+  return reinterpret_cast<const void *>((pass) ? &kernel<FAST_EXACT> : &kernel<SAFE_EXACT>);
 }
 

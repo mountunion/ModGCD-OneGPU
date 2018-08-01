@@ -60,6 +60,7 @@ int main(void)
   kernel<<<props.multiProcessorCount,1024>>>(globalFail);
   assert(cudaSuccess == cudaDeviceSynchronize());
   assert(cudaSuccess == cudaMemcpy(&fail, globalFail, sizeof(fail), cudaMemcpyDeviceToHost));
+  assert(cudaSuccess == cudaFree(globalFail));
   printf("Device %s: %s.\n", props.name, fail ? "FAIL" : "PASS");
   printf("All done\n");
 }
