@@ -20,7 +20,7 @@
 #include <cassert>
 #include <cstdio>
 #include <cstdint>
-#include "quoRem.h"
+#include "modInv.h"
 
 __device__ inline void checkRange(bool* fail, uint32_t xInit, uint32_t xLimit, float yf, float limit)
 {

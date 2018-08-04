@@ -1,8 +1,14 @@
-/*  quasiQuoRem.h.
+/*  modInv.h
 
     Provides inline functions that compute a "quasi" quotient and remainder for 
     the long division xf = quotient * yf + remainder.
     
+
+  Include the modInv inline functions, which, together with ancillary functions, 
+  is in a separate header file so that quoRem<QUASI> can be certified
+  for use on specific devices and modInv can be incorporated into other 
+  source code files.
+  
     K. Weber
     
     1-Aug-2018.
@@ -75,7 +81,7 @@ quasiQuo(uint32_t x, uint32_t y)
 }
  
 //  Computes quotient q and remainder r for x / y, 
-//  when x > FLOAT_THRESHOLD && y >= FLOAT_THRESHOLD/2.
+//  when x >= FLOAT_THRESHOLD && y >= FLOAT_THRESHOLD/2.
 __device__
 static
 inline
@@ -89,6 +95,11 @@ quoRem(uint32_t& r, uint32_t x, uint32_t y)
   return q; 
 }
 
+//  Version of quoRem to use at modInv transition, i.e., when
+//  x >= FLOAT_THRESHOLD && 1 < y < FLOAT_THRESHOLD.
+//  Although algorithm can tolerate a quasi-quotient here (i.e., possibly one less than
+//  the true quotient), the true quotient is about as fast as the quasi-quotient,
+//  so we decide which version to use when the compiler compiles to a specific architecture.
 template <QuoRemType QRTYPE>
 __device__
 static
@@ -113,3 +124,70 @@ quoRem(float& r, uint32_t x, uint32_t y)
     }
   return q;
 }
+
+template
+<typename T>
+__device__
+static
+inline
+void
+swap(T& __restrict__ x, T& __restrict__ y)
+{
+  T tmp = x;
+  x = y;
+  y = tmp;
+}
+
+//  Return 1/v (mod m), assuming gcd(m,v) == 1 && m > v > 0.
+//  Based on the extended Euclidean algorithm:
+//  see Knuth, The Art of Computer Programming, vol. 2, 3/e,
+//  Algorithm X on pp342-3.
+template <QuoRemType QRTYPE>
+__device__
+static
+uint32_t
+modInv(uint32_t v, uint32_t m)
+{
+  uint32_t u2 = 0, u3 = m;
+  uint32_t v2 = 1, v3 = v;
+  
+  //  When u3 and v3 are both large enough, divide with floating point hardware.
+  while  (v3 >= FLOAT_THRESHOLD)
+    {
+      u2 += v2 * quoRem(u3, u3, v3);
+      if (u3 <  FLOAT_THRESHOLD)
+        break;
+      v2 += u2 * quoRem(v3, v3, u3);
+    }
+    
+  bool swapUV = (v3 > u3);
+  if  (swapUV)
+    {
+      swap(u2, v2);
+      swap(u3, v3);
+    }
+
+  //  u3 >= FLOAT_THRESHOLD > v3.
+  //  Transition to both u3 and v3 small, so v3 is cast and u3 is reduced into float variables.
+  float u3f, v3f = __uint2float_rz(v3);
+  u2 += v2 * quoRem<QRTYPE>(u3f, u3, v3);
+   
+  //  When u3 and v3 are both small enough, divide with floating point hardware.   
+  //  At this point v3f > u3f.
+  //  The loop will stop when u3f <= 1.0.
+  //  If u3f == 1.0, |result| is in u2.
+  //  If u3f == 0.0, then v3f == 1.0 and |result| is in v2.
+  while (u3f > 1.0f)
+    {
+      v2 += u2 * quoRem<QRTYPE>(v3f, v3f, u3f);
+      u2 += v2 * quoRem<QRTYPE>(u3f, u3f, v3f);
+    }
+      
+  bool resultInU = (v3f != 1.0f); 
+  if  (resultInU)             
+    v2 = u2;
+  if  (resultInU ^ swapUV)
+    v2 = m - v2;
+  return v2;
+}
+
