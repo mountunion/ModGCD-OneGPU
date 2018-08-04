@@ -1,13 +1,9 @@
 /*  modInv.h
 
-    Provides inline functions that compute a "quasi" quotient and remainder for 
-    the long division xf = quotient * yf + remainder.
-    
-
-  Include the modInv inline functions, which, together with ancillary functions, 
-  is in a separate header file so that quoRem<QUASI> can be certified
-  for use on specific devices and modInv can be incorporated into other 
-  source code files.
+    Provide the modInv inline function, together with ancillary functions,
+    in a separate header file so that quoRem<QUASI> can be certified 
+    for use on specific devices by a standalone program and modInv can be 
+    easily incorporated into other source code files.
   
     K. Weber
     

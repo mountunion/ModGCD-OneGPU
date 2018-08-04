@@ -34,9 +34,6 @@
 #include <cstdlib>
 #include <cuda_runtime.h>
 #include "GmpCuda.h"
-
-//  Include the devicesQuasiQuoRem definition, which is generated
-//  by a configuration script.
 #include "GmpCudaDevice-gcdDevicesQuoRemQuasi.h"
 #include "modInv.h"
 
