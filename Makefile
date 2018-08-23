@@ -101,6 +101,6 @@ clean:
 	rm *.o testmodgcd testmodgcd-nogpu testmodgcd-coop-gps || true
 
 distclean: clean
-	rm createModuli || true
+	rm certifyQuoRemQuasi createModuli || true
 	rm -rf GmpCudaModuli.cpp || true
 	rm -rf tests || true
