@@ -114,7 +114,7 @@ namespace GmpCuda
     static void setDevice(int devNo = 0);
     GmpCudaDevice(void);
     ~GmpCudaDevice();
-    void gcd(mpz_t g, mpz_t u, mpz_t v) throw (std::runtime_error);
+    void gcd(mpz_t g, mpz_t u, mpz_t v); // throw (std::runtime_error)
     int inline getMaxGridSize(void) const {return maxGridSize;}
   };
   

@@ -9,5 +9,6 @@ static const char* devicesQuoRemQuasi[] =
   "GeForce GTX 980 Ti",
   "Tesla P100-PCIE-16GB",
   "Tesla V100-SXM2-16GB",
+  "GeForce RTX 2080",
 };
 
