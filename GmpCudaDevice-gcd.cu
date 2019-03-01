@@ -63,15 +63,6 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
 
   size_t ubits = mpz_sizeinbase(u, 2);
   size_t vbits = mpz_sizeinbase(v, 2);
-
-  //  Slightly overestimate size of parameters and size of result, which is a list of moduli pairs, to get size of buf.
-  uint32_t buf[2*(std::max((ubits + vbits)/64, vbits/(L-1)) + 2)];
-
-  //  Stage parameters into buf and zero fill rest of buf.
-  size_t uSz, vSz;
-  mpz_export(buf,       &uSz, -1, sizeof(uint32_t), 0, 0, u);
-  mpz_export(buf + uSz, &vSz, -1, sizeof(uint32_t), 0, 0, v);
-  memset(buf + uSz + vSz, 0, sizeof(buf) - (uSz + vSz) * sizeof(uint32_t));
   
   int numModuliNeeded = numModuliNeededFor(ubits);
   if (numModuliNeeded > NUM_MODULI)
@@ -81,27 +72,33 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   if (gridSize > maxGridSize)
     throw std::runtime_error("Cannot allocate enough threads to support computation.");
 
-  //  Allocate some extra space in the global buffer, so that modMP can assume it can safely read a multiple of
+  //  Slightly overestimate size of parameters and size of result, which is a list of moduli pairs, to get size of buf. 
+  size_t bufSz = 2*(std::max((ubits + vbits)/64, vbits/(L-1)) + 2) * sizeof(uint32_t);
+  //  Allocate some extra space in buf, so that modMP can assume it can safely read a multiple of
   //  warpSize words to get the entirety (+ more) of either parameter.
-  uint32_t* globalBuf;
+  size_t numb = 8 * sizeof(uint32_t);
+  size_t uSz = (ubits + numb - 1)/numb;
+  size_t vSz = (vbits + numb - 1)/numb;
+  bufSz = std::max(bufSz, sizeof(uint32_t) * (uSz + roundUp(vSz, WARP_SZ))));
+  uint32_t* buf;
+  assert(cudaSuccess == cudaMallocManaged(&buf, bufSz);
 
-  assert(cudaSuccess == cudaMalloc(&globalBuf, std::max(sizeof(buf), sizeof(uint32_t) * (uSz + roundUp(vSz, WARP_SZ)))));
-
-  //  Copy parameters to global memory.
-  assert(cudaSuccess == cudaMemcpy(globalBuf, buf, sizeof(buf), cudaMemcpyHostToDevice));
+  //  Stage parameters into buf and zero fill rest of buf.
+  mpz_export(buf,       &uSz, -1, sizeof(uint32_t), 0, 0, u);
+  mpz_export(buf + uSz, &vSz, -1, sizeof(uint32_t), 0, 0, v);
+  memset(buf + uSz + vSz, 0, bufSz - (uSz + vSz) * sizeof(uint32_t));
 
   barrier->reset();  //  Reset to use again.
 
-  void* args[] = {&globalBuf, &uSz, &vSz, &moduliList, barrier};
+  void* args[] = {&buf, &uSz, &vSz, &moduliList, barrier};
   assert(cudaSuccess == (*kernelLauncher)(gcdKernel, gridSize, GCD_BLOCK_SZ, args, 0, 0));
   assert(cudaSuccess == cudaDeviceSynchronize());
 
-  // Copy result from global memory and convert from mixed-radix to standard representation.
-  assert(cudaSuccess == cudaMemcpy(buf, globalBuf, 2*sizeof(pair_t), cudaMemcpyDeviceToHost));  // Just size and 0th mixed-radix digit read now.
+  // Convert from mixed-radix to standard representation.
   
   if (buf[0] == GCD_KERNEL_ERROR)
     {
-      assert(cudaSuccess == cudaFree(globalBuf));
+      assert(cudaSuccess == cudaFree(buf));
       switch(buf[1])
         {
           case GCD_REDUX_ERROR:    throw std::runtime_error("Ran out of moduli in the reduction loop.");
@@ -109,9 +106,6 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
           default:                 throw std::runtime_error("Unknown error in the gcd kernel.");
         }
     }
-
-  if (buf[0] > 1)
-    assert(cudaSuccess == cudaMemcpy(reinterpret_cast<pair_t*>(buf), globalBuf, buf[0] * sizeof(pair_t), cudaMemcpyDeviceToHost));
 
   pair_t* pairs = reinterpret_cast<pair_t*>(buf) + buf[0] - 1;  // point to most significant digit.
 
@@ -128,5 +122,5 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
 
   mpz_abs(g, g);
 
-  assert(cudaSuccess == cudaFree(globalBuf));
+  assert(cudaSuccess == cudaFree(buf));
 }
