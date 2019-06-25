@@ -72,16 +72,18 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   if (gridSize > maxGridSize)
     throw std::runtime_error("Cannot allocate enough threads to support computation.");
 
-  //  Slightly overestimate size of parameters and size of result, which is a list of moduli pairs, to get size of buf. 
-  size_t bufSz = 2*(std::max((ubits + vbits)/64, vbits/(L-1)) + 2) * sizeof(uint32_t);
-  //  Allocate some extra space in buf, so that modMP can assume it can safely read a multiple of
-  //  warpSize words to get the entirety (+ more) of either parameter.
   size_t numb = 8 * sizeof(uint32_t);
   size_t uSz = (ubits + numb - 1)/numb;
   size_t vSz = (vbits + numb - 1)/numb;
-  bufSz = std::max(bufSz, sizeof(uint32_t) * (uSz + roundUp(vSz, WARP_SZ))));
+
+  //  Slightly overestimate size of parameters and size of result, which is a list of moduli pairs, to get size of buf. 
+  //  Allocate some extra space in buf, so that modMP can assume it can safely read a multiple of
+  //  warpSize words to get the entirety (+ more) of either parameter.
+  size_t bufSz = (2*std::max((ubits + vbits)/64, vbits/(L-1)) + 2) * sizeof(uint32_t);
+         bufSz = std::max(bufSz, sizeof(uint32_t) * (uSz + roundUp(vSz, WARP_SZ)));
+
   uint32_t* buf;
-  assert(cudaSuccess == cudaMallocManaged(&buf, bufSz);
+  assert(cudaSuccess == cudaMallocManaged(&buf, bufSz));
 
   //  Stage parameters into buf and zero fill rest of buf.
   mpz_export(buf,       &uSz, -1, sizeof(uint32_t), 0, 0, u);
