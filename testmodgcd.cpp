@@ -133,6 +133,7 @@ main(int argc, char *argv[])
   cout << "Executing tests only on CPU." << endl;
 #else
   time_t ttime;
+/*
   try
     {
       // Take the work of setting the device out of initialization timing.
@@ -143,6 +144,7 @@ main(int argc, char *argv[])
       cout << e.what() << endl;
       return 0;
     }
+*/
   ttime = -monotonicTime();
   GmpCuda::GmpCudaDevice dev;
   ttime += monotonicTime();
