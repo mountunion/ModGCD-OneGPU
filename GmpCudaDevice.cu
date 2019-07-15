@@ -101,7 +101,7 @@ GmpCudaDevice::GmpCudaDevice(void)
   int devCount;
   assert(cudaSuccess == cudaGetDeviceCount(&devCount));
   
-  deviceNum = 0;
+  int deviceNum = 0;
   assert(cudaSuccess == cudaSetDevice(deviceNum)); 
   //  assert(cudaSuccess == cudaGetDevice(&deviceNum));
 
