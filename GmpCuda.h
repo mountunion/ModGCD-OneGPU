@@ -111,7 +111,6 @@ namespace GmpCuda
     //  pair_t is used to pass result back from gcdKernel to gcd.
     typedef struct __align__(8) {uint32_t modulus; int32_t value;} pair_t;
 #endif
-    static void setDevice(int devNo = 0);
     GmpCudaDevice(void);
     ~GmpCudaDevice();
     void gcd(mpz_t g, mpz_t u, mpz_t v); // throw (std::runtime_error)
