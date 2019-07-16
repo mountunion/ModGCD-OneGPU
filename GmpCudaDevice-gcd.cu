@@ -96,17 +96,18 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
 
 
   //  Launch kernels on all devices, using separate streams.
+  int i;
   cudaStream_t stream[devCount];
-  for (int i = 0; i < devCount; i += 1)
+  void* args[] = {&buf, &uSz, &vSz, &moduliList, barrier, &i, &devCount};
+  for (i = 0; i < devCount; i += 1)
     {
       assert(cudaSuccess == cudaSetDevice(i));
       assert(cudaSuccess == (cudaStreamCreate(&stream[i])));
-      void* args[] = {&buf, &uSz, &vSz, &moduliList, barrier, &i, &devCount};
       assert(cudaSuccess == (*kernelLauncher)(gcdKernel, gridSize, GCD_BLOCK_SZ, args, 0, stream[i]));
     }
 
   //  Synchronize all streams and destroy streams.
-  for (int i = 0; i < devCount; i += 1)
+  for (i = 0; i < devCount; i += 1)
     {
       assert(cudaSuccess == cudaSetDevice(i));
       cudaStreamSynchronize(stream[i]);
