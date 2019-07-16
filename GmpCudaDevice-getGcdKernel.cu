@@ -348,6 +348,18 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
        uint32_t* __restrict__ moduliList, GmpCudaBarrier bar,
        int devIdx, int devDim)
 {
+
+  if (devIdx == 0)
+    {
+      if (blockIdx.x == 0 && threadIdx.x == 0)
+        printf("From device %d of %d\n, " devIdx, devDim);
+    }
+  else
+    {
+      if (blockIdx.x == 0 && threadIdx.x == 0)
+        printf("From device %d of %d\n, " devIdx, devDim);
+      return;
+    }
   int totalModuliRemaining = blockDim.x * gridDim.x;
   int ubits = (uSz + 1) * 32;  // somewhat of an overestimate
   int vbits = (vSz + 1) * 32;  // same here

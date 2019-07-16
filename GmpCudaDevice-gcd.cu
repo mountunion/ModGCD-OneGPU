@@ -95,7 +95,7 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
 
   //  Launch kernels on all devices.
   int devIdx[devCount];
-  for (int i = 0; i < 1; i += 1)  //  Only use device 0 for now.
+  for (int i = 0; i < devCount; i += 1)  //  Only use device 0 for now.
     {
       devIdx[i] = i;
       void* args[] = {&buf, &uSz, &vSz, &moduliList, barrier, devIdx + i, &devCount};
