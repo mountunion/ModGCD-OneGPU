@@ -352,12 +352,12 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
   if (devIdx == 0)
     {
       if (blockIdx.x == 0 && threadIdx.x == 0)
-        printf("From device %d of %d\n, " devIdx, devDim);
+        printf("From device %d of %d\n",  devIdx, devDim);
     }
   else
     {
       if (blockIdx.x == 0 && threadIdx.x == 0)
-        printf("From device %d of %d\n, " devIdx, devDim);
+        printf("From device %d of %d\n", devIdx, devDim);
       return;
     }
   int totalModuliRemaining = blockDim.x * gridDim.x;

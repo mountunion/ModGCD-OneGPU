@@ -90,6 +90,7 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   mpz_export(buf + uSz, &vSz, -1, sizeof(uint32_t), 0, 0, v);
   memset(buf + uSz + vSz, 0, bufSz - (uSz + vSz) * sizeof(uint32_t));
 
+      assert(cudaSuccess == cudaSetDevice(0));
   barrier->reset();  //  Reset to use again.
 
 
@@ -98,11 +99,13 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   for (int i = 0; i < devCount; i += 1)  //  Only use device 0 for now.
     {
       devIdx[i] = i;
+      assert(cudaSuccess == cudaSetDevice(i));
       void* args[] = {&buf, &uSz, &vSz, &moduliList, barrier, devIdx + i, &devCount};
      //  Need to add stream.
       assert(cudaSuccess == (*kernelLauncher)(gcdKernel, gridSize, GCD_BLOCK_SZ, args, 0, 0));
+      assert(cudaSuccess == cudaDeviceSynchronize());
     }
-  assert(cudaSuccess == cudaDeviceSynchronize());
+
 
   // Convert from mixed-radix to standard representation.
   
