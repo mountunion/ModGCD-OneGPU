@@ -94,32 +94,26 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
 
   barrier->reset();  //  Reset to use again.
 
-  cudaStream_t stream[devCount];
 
-  for (int i = 0; i < devCount; i += 1)  //  Only use device 0 for now.
-    {
-      assert(cudaSuccess == cudaSetDevice(i));
-      assert(cudaSuccess == (cudaStreamCreate(&stream[i])));
-    }
-
-  //  Launch kernels on all devices.
+  //  Launch kernels on all devices, using separate streams.
   int devIdx[devCount];
-  for (int i = 0; i < devCount; i += 1)  //  Only use device 0 for now.
+  cudaStream_t stream[devCount];
+  for (int i = 0; i < devCount; i += 1)
     {
       devIdx[i] = i;
       assert(cudaSuccess == cudaSetDevice(i));
+      assert(cudaSuccess == (cudaStreamCreate(&stream[i])));
       void* args[] = {&buf, &uSz, &vSz, &moduliList, barrier, devIdx + i, &devCount};
-     //  Need to add stream.
       assert(cudaSuccess == (*kernelLauncher)(gcdKernel, gridSize, GCD_BLOCK_SZ, args, 0, stream[i]));
     }
 
-  for (int i = 0; i < devCount; i += 1)  //  Only use device 0 for now.
+  //  Synchronize all streams and destroy streams.
+  for (int i = 0; i < devCount; i += 1)
     {
       assert(cudaSuccess == cudaSetDevice(i));
       cudaStreamSynchronize(stream[i]);
       assert(cudaSuccess == cudaStreamDestroy(stream[i]));
     }
-
 
   // Convert from mixed-radix to standard representation.
   
