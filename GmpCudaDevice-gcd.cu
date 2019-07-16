@@ -99,7 +99,8 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
     {
       devIdx[i] = i;
       void* args[] = {&buf, &uSz, &vSz, &moduliList, barrier, devIdx + i, &devCount};
-      assert(cudaSuccess == (*kernelLauncher)(gcdKernel, gridSize, GCD_BLOCK_SZ, args, 0, i));
+     //  Need to add stream.
+      assert(cudaSuccess == (*kernelLauncher)(gcdKernel, gridSize, GCD_BLOCK_SZ, args, 0, 0));
     }
   assert(cudaSuccess == cudaDeviceSynchronize());
 
