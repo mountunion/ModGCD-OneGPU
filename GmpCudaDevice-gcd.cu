@@ -98,7 +98,7 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   int i = 0;
   cudaStream_t stream[devCount];
   void* args[] = {&buf, &uSz, &vSz, &moduliList, barrier, &i, &devCount};
-  int devGridSize = 0; // gridSize / devCount;
+  int devGridSize = gridSize / devCount;
   for (i = 0; i < devCount; i += 1)
     {
       assert(cudaSuccess == cudaSetDevice(i));
