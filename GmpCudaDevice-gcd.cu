@@ -48,10 +48,10 @@ roundUp(T x, int b)
 //  then rounded up to the next multiple of GCD_BLOCK_SZ.
 inline
 int
-numModuliNeededFor(size_t numBits)
+numModuliNeededFor(size_t numBits, int roundUpBlock)
 {
   constexpr float C_L = 1.6 - 0.015 * L; 
-  return roundUp(static_cast<int>(ceil(C_L * numBits / logf(numBits))), GmpCudaDevice::GCD_BLOCK_SZ);
+  return roundUp(static_cast<int>(ceil(C_L * numBits / logf(numBits))), roundUpBlock);
 }
 
 void
@@ -66,7 +66,7 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   size_t ubits = mpz_sizeinbase(u, 2);
   size_t vbits = mpz_sizeinbase(v, 2);
   
-  int numModuliNeeded = numModuliNeededFor(ubits);
+  int numModuliNeeded = numModuliNeededFor(ubits, GCD_BLOCK_SZ * devCount);
   if (numModuliNeeded > NUM_MODULI)
     throw std::runtime_error("Not enough moduli available for given input.");
     
@@ -99,14 +99,11 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   cudaStream_t stream[devCount];
   void* args[] = {&buf, &uSz, &vSz, &moduliList, barrier, &i, &devCount};
   int devGridSize = 0; // gridSize / devCount;
-  assert(cudaSuccess == (cudaStreamCreate(&stream[0])));
-  assert(cudaSuccess == (*kernelLauncher)(gcdKernel, gridSize - (devCount - 1) * devGridSize, GCD_BLOCK_SZ, args, 0, stream[0]));
-  for (i = 1; i < devCount; i += 1)
+  for (i = 0; i < devCount; i += 1)
     {
       assert(cudaSuccess == cudaSetDevice(i));
       assert(cudaSuccess == (cudaStreamCreate(&stream[i])));
-      if (devGridSize > 0)
-        assert(cudaSuccess == (*kernelLauncher)(gcdKernel, devGridSize, GCD_BLOCK_SZ, args, 0, stream[i]));
+      assert(cudaSuccess == (*kernelLauncher)(gcdKernel, devGridSize, GCD_BLOCK_SZ, args, 0, stream[i]));
     }
 
   //  Synchronize all streams and destroy streams.
