@@ -98,16 +98,15 @@ using namespace GmpCuda;
 //  Also initializes the global barrier and the moduli list.
 GmpCudaDevice::GmpCudaDevice(void)
 {
-  int devCount;
   assert(cudaSuccess == cudaGetDeviceCount(&devCount));
   
-  int deviceNum = 0;
-  assert(cudaSuccess == cudaSetDevice(deviceNum));    //  Assuming all devices on this node are the same!
-  //  assert(cudaSuccess == cudaGetDevice(&deviceNum));
+  int devIdx = 0;
+  assert(cudaSuccess == cudaSetDevice(devIdx));    //  Assuming all devices on this node are the same!
+  //  assert(cudaSuccess == cudaGetDevice(&devIdx));
 
   //  Initialize the device properties values.
   struct cudaDeviceProp props;
-  assert(cudaSuccess == cudaGetDeviceProperties(&props, deviceNum));
+  assert(cudaSuccess == cudaGetDeviceProperties(&props, devIdx));
 
   assert(props.warpSize == WARP_SZ);  //  Assume a fixed warp size of 32 for the forseeable future.
   

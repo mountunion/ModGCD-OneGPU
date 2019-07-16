@@ -345,7 +345,8 @@ __global__
 static
 void
 kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz, 
-       uint32_t* __restrict__ moduliList, GmpCudaBarrier bar)
+       uint32_t* __restrict__ moduliList, GmpCudaBarrier bar,
+       int devIdx, int devDim)
 {
   int totalModuliRemaining = blockDim.x * gridDim.x;
   int ubits = (uSz + 1) * 32;  // somewhat of an overestimate

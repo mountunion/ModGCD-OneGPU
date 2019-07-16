@@ -95,6 +95,7 @@ namespace GmpCuda
 #endif
     GmpCudaBarrier* barrier;
     uint32_t* moduliList;
+    int devCount;
     int maxGridSize;
     const void* getGcdKernel(char* devName);
     const void* gcdKernel;
