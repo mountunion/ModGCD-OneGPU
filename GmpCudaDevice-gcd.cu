@@ -58,6 +58,8 @@ void
 __host__
 GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
 {
+  assert(cudaSuccess == cudaSetDevice(0));
+
   if(mpz_cmp(u, v) < 0)
     mpz_swap(u, v);
 
@@ -90,9 +92,15 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   mpz_export(buf + uSz, &vSz, -1, sizeof(uint32_t), 0, 0, v);
   memset(buf + uSz + vSz, 0, bufSz - (uSz + vSz) * sizeof(uint32_t));
 
-      assert(cudaSuccess == cudaSetDevice(0));
   barrier->reset();  //  Reset to use again.
 
+  cudaStream_t stream[devCount];
+
+  for (int i = 0; i < devCount; i += 1)  //  Only use device 0 for now.
+    {
+      assert(cudaSuccess == cudaSetDevice(i));
+      assert(cudaSuccess == (cudaStreamCreate(&stream[i])));
+    }
 
   //  Launch kernels on all devices.
   int devIdx[devCount];
@@ -102,8 +110,14 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
       assert(cudaSuccess == cudaSetDevice(i));
       void* args[] = {&buf, &uSz, &vSz, &moduliList, barrier, devIdx + i, &devCount};
      //  Need to add stream.
-      assert(cudaSuccess == (*kernelLauncher)(gcdKernel, gridSize, GCD_BLOCK_SZ, args, 0, 0));
-      assert(cudaSuccess == cudaDeviceSynchronize());
+      assert(cudaSuccess == (*kernelLauncher)(gcdKernel, gridSize, GCD_BLOCK_SZ, args, 0, stream[i]));
+    }
+
+  for (int i = 0; i < devCount; i += 1)  //  Only use device 0 for now.
+    {
+      assert(cudaSuccess == cudaSetDevice(i));
+      cudaStreamSynchronize(stream[i]);
+      assert(cudaSuccess == cudaStreamDestroy(stream[i]));
     }
 
 
@@ -135,5 +149,6 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
 
   mpz_abs(g, g);
 
+  assert(cudaSuccess == cudaSetDevice(0));
   assert(cudaSuccess == cudaFree(buf));
 }
