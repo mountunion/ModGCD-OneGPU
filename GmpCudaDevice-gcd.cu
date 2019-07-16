@@ -94,16 +94,19 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
 
   barrier->reset();  //  Reset to use again.
 
-
   //  Launch kernels on all devices, using separate streams.
-  int i;
+  int i = 0;
   cudaStream_t stream[devCount];
   void* args[] = {&buf, &uSz, &vSz, &moduliList, barrier, &i, &devCount};
-  for (i = 0; i < devCount; i += 1)
+  int devGridSize = 0; // gridSize / devCount;
+  assert(cudaSuccess == (cudaStreamCreate(&stream[0])));
+  assert(cudaSuccess == (*kernelLauncher)(gcdKernel, gridSize - (devCount - 1) * devGridSize, GCD_BLOCK_SZ, args, 0, stream[0]));
+  for (i = 1; i < devCount; i += 1)
     {
       assert(cudaSuccess == cudaSetDevice(i));
       assert(cudaSuccess == (cudaStreamCreate(&stream[i])));
-      assert(cudaSuccess == (*kernelLauncher)(gcdKernel, gridSize, GCD_BLOCK_SZ, args, 0, stream[i]));
+      if (devGridSize > 0)
+        assert(cudaSuccess == (*kernelLauncher)(gcdKernel, devGridSize, GCD_BLOCK_SZ, args, 0, stream[i]));
     }
 
   //  Synchronize all streams and destroy streams.
