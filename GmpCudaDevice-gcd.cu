@@ -104,6 +104,11 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
       assert(cudaSuccess == cudaSetDevice(i));
       assert(cudaSuccess == cudaDeviceSynchronize());
       assert(cudaSuccess == (cudaStreamCreate(&stream[i])));
+      assert(cudaSuccess == cudaStreamSynchronize(stream[i]));
+    }
+  for (i = 0; i < devCount; i += 1)
+    {
+      assert(cudaSuccess == cudaSetDevice(i));
       assert(cudaSuccess == (*kernelLauncher)(gcdKernel, devGridSize, GCD_BLOCK_SZ, args, 0, stream[i]));
     }
 
@@ -112,7 +117,6 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
     {
       assert(cudaSuccess == cudaSetDevice(i));
       assert(cudaSuccess == cudaDeviceSynchronize());
-printf("Stream %d\n", i);
       assert(cudaSuccess == cudaStreamSynchronize(stream[i]));
       assert(cudaSuccess == cudaStreamDestroy(stream[i]));
     }

@@ -348,17 +348,6 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
        uint32_t* __restrict__ moduliList, GmpCudaBarrier bar,
        int devIdx, int devDim)
 {
-
-  if (devIdx == 0)
-    {
-      if (blockIdx.x == 0 && threadIdx.x == 0)
-        printf("From device %d of %d\n",  devIdx, devDim);
-    }
-  else
-    {
-      if (blockIdx.x == 0 && threadIdx.x == 0)
-        printf("From device %d of %d\n", devIdx, devDim);
-    }
   int totalModuliRemaining = blockDim.x * gridDim.x * devDim;
   int ubits = (uSz + 1) * 32;  // somewhat of an overestimate
   int vbits = (vSz + 1) * 32;  // same here
@@ -379,9 +368,6 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
   pair_t pair, myPair;
   myPair.modulus = q.modulus;
   myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv<QRTYPE>(uq, vq, q), q);
-printf("%u\n", q.modulus);
-pair.value = 1;
-goto init_pairs;
   postMinPair(myPair, bar, devIdx, devDim);
   collectMinPair(pair, bar, devIdx, devDim);
   
@@ -417,9 +403,7 @@ goto init_pairs;
   while (pair.value != MOD_INFINITY);
    
   //MGCD4: [Find SIGNED mixed-radix representation] Each "digit" is either positive or negative.
-init_pairs:
   pair_t* pairs = (pair_t *)buf + 1;
-goto skip;
 
   myPair.value = (active) ? toSigned(uq, q) : 0;  //  Inactive threads should have low priority.
 
@@ -447,7 +431,7 @@ goto skip;
       collectAnyPairPriorityNonzero(pair, bar, devIdx, devDim);
     }
   while (pair.value != 0);
-skip:
+
   if (devIdx | blockIdx.x | threadIdx.x)  //  Final cleanup by just one thread.
     return;
 

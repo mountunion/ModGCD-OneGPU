@@ -30,7 +30,9 @@ using namespace GmpCuda;
 //  nonzero uint64_t data among multiprocessors.
 GmpCudaBarrier::GmpCudaBarrier(int gridSize) : copy(false), row(0)
 {
-  assert(cudaSuccess == cudaMallocPitch(&barrier, &pitch, gridSize * sizeof(uint64_t), 4));
+  assert(cudaSuccess == cudaMallocManaged(&barrier, gridSize * sizeof(uint64_t) * 4)); // DBG
+  pitch = gridSize * sizeof(uint64_t); //DBG
+  // assert(cudaSuccess == cudaMallocPitch(&barrier, &pitch, gridSize * sizeof(uint64_t), 4));
   assert(cudaSuccess == cudaMemset(const_cast<char *>(barrier), 0xff, pitch * 4));
 }
 
