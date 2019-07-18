@@ -58,7 +58,6 @@ void
 __host__
 GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
 {
-  devCount = 1;
   assert(cudaSuccess == cudaSetDevice(0));
 
   if(mpz_cmp(u, v) < 0)
