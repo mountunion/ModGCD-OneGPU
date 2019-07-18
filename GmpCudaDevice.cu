@@ -125,7 +125,7 @@ GmpCudaDevice::GmpCudaDevice(void)
   assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&gcdOccupancy, gcdKernel, GCD_BLOCK_SZ, 0));
   maxGridSize = min(GCD_BLOCK_SZ, props.multiProcessorCount * gcdOccupancy *devCount);
   // This ^^^ works if we assume devices are homogeneous.
-    
+
   barrier = new GmpCudaBarrier(maxGridSize);
   
   //  Copy moduli to device.
