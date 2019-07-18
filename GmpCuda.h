@@ -49,15 +49,15 @@ namespace GmpCuda
     //  Only allow low gridDim.x threads on each multiprocessor to participate.
     //  Values in threads whose threadIdx.x == 0 will be shared with all multiprocessors.
     //  Values shared MUST be nonzero.
-    __device__ inline void post(uint64_t x)
+    __device__ inline void post(uint64_t x, int devIdx, int devDim)
     {
-      if (threadIdx.x < gridDim.x)
+      if (threadIdx.x < devDim * gridDim.x)
         {
           row += 1;
           if (threadIdx.x == 0)
             {
-              barRow(row + 1)[blockIdx.x] = uint64_t{0};
-              barRow(row    )[blockIdx.x] = x;
+              barRow(row + 1)[devIdx * gridDim.x + blockIdx.x] = uint64_t{0};
+              barRow(row    )[devIdx * gridDim.x + blockIdx.x] = x;
             }
         }
     }
@@ -65,7 +65,7 @@ namespace GmpCuda
     //  Only allow low gridDim.x threads on each multiprocessor to participate.
     //  Collect gridDim.x results in out variable of the low gridDim.x threads.
     //  No __syncthreads() done here--caller generally should.
-    __device__ inline void collect(uint64_t& out)
+    __device__ inline void collect(uint64_t& out, int devIdx, int devDim)
     {
 #if defined(USE_COOP_GROUPS) && defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 600
       cooperative_groups::this_grid().sync();
@@ -73,7 +73,7 @@ namespace GmpCuda
 #else
       constexpr bool SPIN_WAIT = true;
 #endif
-      if (threadIdx.x < gridDim.x)
+      if (threadIdx.x < devDim * gridDim.x)
         {
           volatile uint64_t * bar = barRow(row) + threadIdx.x;
           do

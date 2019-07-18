@@ -58,6 +58,7 @@ void
 __host__
 GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
 {
+  devCount = 1;
   assert(cudaSuccess == cudaSetDevice(0));
 
   if(mpz_cmp(u, v) < 0)
@@ -92,7 +93,9 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   mpz_export(buf + uSz, &vSz, -1, sizeof(uint32_t), 0, 0, v);
   memset(buf + uSz + vSz, 0, bufSz - (uSz + vSz) * sizeof(uint32_t));
 
+      cudaStreamSynchronize(0);
   barrier->reset();  //  Reset to use again.
+      cudaStreamSynchronize(0);
 
   //  Launch kernels on all devices, using separate streams.
   int i = 0;

@@ -69,7 +69,7 @@ findAnyNonZero(pair_t pair, bool predicate = true)
 __device__
 static
 void
-postAnyPairPriorityNonzero(pair_t pair, GmpCudaBarrier &bar)
+postAnyPairPriorityNonzero(pair_t pair, GmpCudaBarrier &bar, int devIdx, int devDim)
 {
    __shared__ pair_t sharedPair[WARP_SZ];
    
@@ -82,7 +82,7 @@ postAnyPairPriorityNonzero(pair_t pair, GmpCudaBarrier &bar)
   
   pair = sharedPair[findAnyNonZero(sharedPair[threadIdx.x], threadIdx.x < WARPS_PER_BLOCK)];
   
-  bar.post(*reinterpret_cast<uint64_t *>(&pair));
+  bar.post(*reinterpret_cast<uint64_t *>(&pair), devIdx, devDim);
 }
 
 //  Chooses one of the pairs in the barrier that doesn't have a 0 value;
@@ -94,22 +94,22 @@ __device__
 static
 void
 collectAnyPairPriorityNonzero(pair_t& __restrict__ pair, 
-                              GmpCudaBarrier& __restrict__ bar)
+                              GmpCudaBarrier& __restrict__ bar, int devIdx, int devDim)
 {
   __shared__ pair_t sharedPair[WARP_SZ];
   
-  bar.collect(*reinterpret_cast<uint64_t*>(&pair)); // Only low gridDim.x threads have "good" values.
+  bar.collect(*reinterpret_cast<uint64_t*>(&pair), devIdx, devDim); // Only low devDim * gridDim.x threads have "good" values.
   
   __syncthreads();  // protect shared memory against last call to this function.
   
   int warpLane = threadIdx.x % WARP_SZ;
   
-  if (findAnyNonZero(pair, threadIdx.x < gridDim.x) == warpLane && threadIdx.x < gridDim.x)
+  if (findAnyNonZero(pair, threadIdx.x < devDim * gridDim.x) == warpLane && threadIdx.x < devDim * gridDim.x)
     sharedPair[threadIdx.x / WARP_SZ] = pair;
 
   __syncthreads();
 
-  int numWarps = (gridDim.x - 1) / WARP_SZ + 1;
+  int numWarps = (devDim * gridDim.x - 1) / WARP_SZ + 1;
 
   //  All warps do this and get common value for winner.
   pair = sharedPair[findAnyNonZero(sharedPair[warpLane], warpLane < numWarps)];
@@ -143,7 +143,7 @@ modAbs(int32_t x)
 __device__
 static
 void
-postMinPair(pair_t pair, GmpCudaBarrier& bar)
+postMinPair(pair_t pair, GmpCudaBarrier& bar, int devIdx, int devDim)
 {
   __shared__ uint64_t sharedX[WARP_SZ];
 
@@ -169,7 +169,7 @@ postMinPair(pair_t pair, GmpCudaBarrier& bar)
         x = min(x, __shfl_down_sync(FULL_MASK, x, i));        
     }
 
-  bar.post(x);
+  bar.post(x, devIdx, devDim);
 }
 
 //  Returns, in pair, the pair which achieves the global minimum of the absolute value 
@@ -178,20 +178,20 @@ postMinPair(pair_t pair, GmpCudaBarrier& bar)
 __device__
 static
 void
-collectMinPair(pair_t& __restrict__ pair, GmpCudaBarrier& __restrict__ bar)
+collectMinPair(pair_t& __restrict__ pair, GmpCudaBarrier& __restrict__ bar, int devIdx, int devDim)
 {
   uint64_t x;
-  bar.collect(x);
+  bar.collect(x, devIdx, devDim);
   
   __shared__ uint64_t sharedX[WARP_SZ];
   
   __syncthreads();  // protect shared memory against last call to this function.
       
-  int numWarps =  (gridDim.x - 1) / WARP_SZ + 1;
+  int numWarps =  (devDim * gridDim.x - 1) / WARP_SZ + 1;
 
   if (threadIdx.x / WARP_SZ < numWarps)
     {
-      if (threadIdx.x >= gridDim.x)
+      if (threadIdx.x >= devDim * gridDim.x)
         x = UINT64_MAX;
       minWarp(x);
       if (threadIdx.x % WARP_SZ == 0)
@@ -203,7 +203,7 @@ collectMinPair(pair_t& __restrict__ pair, GmpCudaBarrier& __restrict__ bar)
     {
       x = (threadIdx.x < numWarps) ? sharedX[threadIdx.x] : UINT64_MAX;
 #pragma unroll
-      for (int i = WARPS_PER_BLOCK/2; i > 1; i /= 2)  //  assert(gridDim.x <= blockDim.x);
+      for (int i = WARPS_PER_BLOCK/2; i > 1; i /= 2)  //  assert(devDim * gridDim.x <= blockDim.x);
         x = min(x, __shfl_down_sync(FULL_MASK, x, i));  
       sharedX[threadIdx.x] = min(x, __shfl_down_sync(FULL_MASK, x, 1));                            
    }
@@ -329,9 +329,9 @@ __device__
 static
 inline
 modulus_t
-getModulus(uint32_t* moduliList)
+getModulus(uint32_t* moduliList, int devIdx)
 {
-    uint32_t m = moduliList[blockDim.x * blockIdx.x + threadIdx.x];
+    uint32_t m = moduliList[gridDim.x * devIdx + blockDim.x * blockIdx.x + threadIdx.x];
     uint64_t D = static_cast<uint64_t>(m);
     constexpr uint64_t FC_hi = uint64_t{1} << (W - 1);
     uint64_t q = FC_hi / D;
@@ -360,12 +360,12 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
         printf("From device %d of %d\n", devIdx, devDim);
       return;
     }
-  int totalModuliRemaining = blockDim.x * gridDim.x;
+  int totalModuliRemaining = blockDim.x * gridDim.x * devDim;
   int ubits = (uSz + 1) * 32;  // somewhat of an overestimate
   int vbits = (vSz + 1) * 32;  // same here
-  
+
   //MGCD1: [Find suitable moduli]
-  modulus_t q = getModulus(moduliList);
+  modulus_t q = getModulus(moduliList, devIdx);
 
   //MGCD2: [Convert to modular representation]
 
@@ -380,8 +380,8 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
   pair_t pair, myPair;
   myPair.modulus = q.modulus;
   myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv<QRTYPE>(uq, vq, q), q);
-  postMinPair(myPair, bar);
-  collectMinPair(pair, bar);
+  postMinPair(myPair, bar, devIdx, devDim);
+  collectMinPair(pair, bar, devIdx, devDim);
   
   do
     {
@@ -397,7 +397,7 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
           tq = modDiv<QRTYPE>(modSub(uq, modMul(fromSigned(pair.value, q), vq, q), q), p, q);
           myPair.value = (tq == 0) ? MOD_INFINITY : toSigned(modDiv<QRTYPE>(vq, tq, q), q);
         }
-      postMinPair(myPair, bar);
+      postMinPair(myPair, bar, devIdx, devDim);
       if (active)
         uq = vq, vq = tq;       
       totalModuliRemaining -= 1;
@@ -405,12 +405,12 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
       ubits = vbits, vbits = tbits;
       if (totalModuliRemaining * (L - 2) <= ubits)  //  Ran out of moduli--means initial estimate was wrong.
         {
-          if (blockIdx.x && threadIdx.x)
+          if (devIdx | blockIdx.x | threadIdx.x)
             return;
           buf[0] = GmpCudaDevice::GCD_KERNEL_ERROR, buf[1] = GmpCudaDevice::GCD_REDUX_ERROR;
           return;
         }        
-      collectMinPair(pair, bar);
+      collectMinPair(pair, bar, devIdx, devDim);
     }
   while (pair.value != MOD_INFINITY);
    
@@ -420,9 +420,9 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
 
   myPair.value = (active) ? toSigned(uq, q) : 0;  //  Inactive threads should have low priority.
 
-  postAnyPairPriorityNonzero(myPair, bar);
+  postAnyPairPriorityNonzero(myPair, bar, devIdx, devDim);
 
-  collectAnyPairPriorityNonzero(pair, bar);
+  collectAnyPairPriorityNonzero(pair, bar, devIdx, devDim);
 
   do
     {
@@ -436,16 +436,16 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
           uq = modDiv<QRTYPE>(modSub(uq, fromSigned(pair.value, q), q), p, q);
           myPair.value = toSigned(uq, q);
         }
-      postAnyPairPriorityNonzero(myPair, bar);
+      postAnyPairPriorityNonzero(myPair, bar, devIdx, devDim);
       *pairs++ = pair;
       totalModuliRemaining -= 1;
       if (totalModuliRemaining <= 0)  //  Something went wrong.
         break;
-      collectAnyPairPriorityNonzero(pair, bar);
+      collectAnyPairPriorityNonzero(pair, bar, devIdx, devDim);
     }
   while (pair.value != 0);
 
-  if (blockIdx.x | threadIdx.x)  //  Final cleanup by just one thread.
+  if (devIdx | blockIdx.x | threadIdx.x)  //  Final cleanup by just one thread.
     return;
 
   //  Return a count of all the nonzero pairs, plus one more "pair" that includes buf[0] itself.

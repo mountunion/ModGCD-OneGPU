@@ -123,8 +123,8 @@ GmpCudaDevice::GmpCudaDevice(void)
   //  Limit the grid, and thus, the barrier size also.
   int gcdOccupancy;
   assert(cudaSuccess == cudaOccupancyMaxActiveBlocksPerMultiprocessor(&gcdOccupancy, gcdKernel, GCD_BLOCK_SZ, 0));
-  maxGridSize = min(GCD_BLOCK_SZ, props.multiProcessorCount * gcdOccupancy);
-  maxGridSize *= devCount;  // This works if we assume devices are homogeneous.
+  maxGridSize = min(GCD_BLOCK_SZ, props.multiProcessorCount * gcdOccupancy *devCount);
+  // This ^^^ works if we assume devices are homogeneous.
     
   barrier = new GmpCudaBarrier(maxGridSize);
   
