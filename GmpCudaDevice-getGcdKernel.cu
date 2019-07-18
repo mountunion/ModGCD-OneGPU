@@ -331,7 +331,7 @@ inline
 modulus_t
 getModulus(uint32_t* moduliList, int devIdx)
 {
-    uint32_t m = moduliList[gridDim.x * devIdx + blockDim.x * blockIdx.x + threadIdx.x];
+    uint32_t m = moduliList[gridDim.x * blockDim.x * devIdx + blockDim.x * blockIdx.x + threadIdx.x];
     uint64_t D = static_cast<uint64_t>(m);
     constexpr uint64_t FC_hi = uint64_t{1} << (W - 1);
     uint64_t q = FC_hi / D;
