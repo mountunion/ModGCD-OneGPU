@@ -89,13 +89,13 @@ GmpCudaDevice-getGcdKernel-coop-gps.o: GmpCudaDevice-getGcdKernel.cu GmpCudaDevi
 	$(NVCC) $(NVCCFLAGS) -DUSE_COOP_GROUPS $(GCD_KERN_FLAGS) -c $< -o $@
 
 createModuli: createModuli.cpp GmpCuda.h
-	$(CXX) $(CXXFLAGS) $< $(GMPL) -o $@
+	$((CXX)) $(CXXFLAGS) $< $(GMPL) -o $@
 
 GmpCudaModuli.cpp: createModuli GmpCuda.h
 	./createModuli > $@
 
 GmpCudaModuli.o: GmpCudaModuli.cpp GmpCuda.h
-	$(CXX) $(CXXFLAGS) -c $<
+	$(NVCC) $(NVCCFLAGS) -c $<
 
 clean:
 	rm -rf *.o certifyQuoRemQuasi testmodgcd testmodgcd-nogpu testmodgcd-coop-gps tests  > /dev/null 2>&1  || true

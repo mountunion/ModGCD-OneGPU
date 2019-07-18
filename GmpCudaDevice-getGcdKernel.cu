@@ -331,7 +331,7 @@ inline
 modulus_t
 getModulus(uint32_t* moduliList, int devIdx)
 {
-    uint32_t m = moduliList[gridDim.x * blockDim.x * devIdx + blockDim.x * blockIdx.x + threadIdx.x];
+    uint32_t m = moduliList[(gridDim.x * devIdx + blockIdx.x) * blockDim.x  + threadIdx.x];
     uint64_t D = static_cast<uint64_t>(m);
     constexpr uint64_t FC_hi = uint64_t{1} << (W - 1);
     uint64_t q = FC_hi / D;
@@ -379,6 +379,9 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
   pair_t pair, myPair;
   myPair.modulus = q.modulus;
   myPair.value = (vq == 0) ? MOD_INFINITY : toSigned(modDiv<QRTYPE>(uq, vq, q), q);
+printf("%u\n", q.modulus);
+pair.value = 1;
+goto init_pairs;
   postMinPair(myPair, bar, devIdx, devDim);
   collectMinPair(pair, bar, devIdx, devDim);
   
@@ -414,8 +417,9 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
   while (pair.value != MOD_INFINITY);
    
   //MGCD4: [Find SIGNED mixed-radix representation] Each "digit" is either positive or negative.
-
+init_pairs:
   pair_t* pairs = (pair_t *)buf + 1;
+goto skip;
 
   myPair.value = (active) ? toSigned(uq, q) : 0;  //  Inactive threads should have low priority.
 
@@ -443,7 +447,7 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
       collectAnyPairPriorityNonzero(pair, bar, devIdx, devDim);
     }
   while (pair.value != 0);
-
+skip:
   if (devIdx | blockIdx.x | threadIdx.x)  //  Final cleanup by just one thread.
     return;
 

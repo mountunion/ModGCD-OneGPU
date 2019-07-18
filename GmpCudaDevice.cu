@@ -130,7 +130,7 @@ GmpCudaDevice::GmpCudaDevice(void)
   
   //  Copy moduli to device.
   size_t maxModuliBytes = maxGridSize * GCD_BLOCK_SZ * sizeof(uint32_t);
-  assert(cudaSuccess == cudaMalloc(&moduliList, maxModuliBytes));
+  assert(cudaSuccess == cudaMallocManaged(&moduliList, maxModuliBytes));
   assert(cudaSuccess == cudaMemcpy(moduliList, moduli, maxModuliBytes, cudaMemcpyHostToDevice));
 }
 

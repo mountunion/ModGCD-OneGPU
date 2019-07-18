@@ -92,9 +92,7 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   mpz_export(buf + uSz, &vSz, -1, sizeof(uint32_t), 0, 0, v);
   memset(buf + uSz + vSz, 0, bufSz - (uSz + vSz) * sizeof(uint32_t));
 
-      cudaStreamSynchronize(0);
   barrier->reset();  //  Reset to use again.
-      cudaStreamSynchronize(0);
 
   //  Launch kernels on all devices, using separate streams.
   int i = 0;
@@ -104,6 +102,7 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   for (i = 0; i < devCount; i += 1)
     {
       assert(cudaSuccess == cudaSetDevice(i));
+      assert(cudaSuccess == cudaDeviceSynchronize());
       assert(cudaSuccess == (cudaStreamCreate(&stream[i])));
       assert(cudaSuccess == (*kernelLauncher)(gcdKernel, devGridSize, GCD_BLOCK_SZ, args, 0, stream[i]));
     }
@@ -112,7 +111,9 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   for (i = 0; i < devCount; i += 1)
     {
       assert(cudaSuccess == cudaSetDevice(i));
-      cudaStreamSynchronize(stream[i]);
+      assert(cudaSuccess == cudaDeviceSynchronize());
+printf("Stream %d\n", i);
+      assert(cudaSuccess == cudaStreamSynchronize(stream[i]));
       assert(cudaSuccess == cudaStreamDestroy(stream[i]));
     }
 
