@@ -358,7 +358,6 @@ kernel(uint32_t* __restrict__ buf, size_t uSz, size_t vSz,
     {
       if (blockIdx.x == 0 && threadIdx.x == 0)
         printf("From device %d of %d\n", devIdx, devDim);
-      return;
     }
   int totalModuliRemaining = blockDim.x * gridDim.x * devDim;
   int ubits = (uSz + 1) * 32;  // somewhat of an overestimate
