@@ -1,6 +1,8 @@
 # ModGCD-OneGPU
 Modular Integer GCD for one GPU
 
+This branch is an experimental and naive implementation that runs on a single node of n GPUs, and assumes the GPUs are all the same.
+
 See [An Implementation of the Modular Integer GCD Algorithm on a Single GPU](https://github.com/mountunion/ModGCD-OneGPU/blob/master/ModGCD-OneGPU.pdf) for more information on the overall project, including references to additional resources.
 
 Requires CUDA 9 development kit or more recent.  (See https://developer.nvidia.com/cuda-downloads for most recent.)
