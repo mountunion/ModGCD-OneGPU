@@ -121,13 +121,13 @@ GmpCudaDevice::gcd(mpz_t g, mpz_t u, mpz_t v) // throw (std::runtime_error)
   
   if (buf[0] == GCD_KERNEL_ERROR)
     {
-      assert(cudaSuccess == cudaFree(buf));
       switch(buf[1])
         {
           case GCD_REDUX_ERROR:    throw std::runtime_error("Ran out of moduli in the reduction loop.");
           case GCD_RECOVERY_ERROR: throw std::runtime_error("Ran out of moduli in the recovery loop.");
           default:                 throw std::runtime_error("Unknown error in the gcd kernel.");
         }
+      assert(cudaSuccess == cudaFree(buf));
     }
 
   pair_t* pairs = reinterpret_cast<pair_t*>(buf) + buf[0] - 1;  // point to most significant digit.
