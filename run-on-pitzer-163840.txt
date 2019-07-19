@@ -1,0 +1,112 @@
+Test run date/time: Fri Jul 19 01:03:23 EDT 2019
+
+Currently Loaded Modules:
+  1) xalt/latest   3) intel/18.0.3   5) modules/au2018
+  2) cxx17/7.3.0   4) mvapich2/2.3   6) cuda/10.0.130
+
+ 
+
+./deviceQuery Starting...
+
+ CUDA Device Query (Runtime API) version (CUDART static linking)
+
+Detected 2 CUDA Capable device(s)
+
+Device 0: "Tesla V100-PCIE-16GB"
+  CUDA Driver Version / Runtime Version          10.0 / 7.5
+  CUDA Capability Major/Minor version number:    7.0
+  Total amount of global memory:                 16130 MBytes (16914055168 bytes)
+MapSMtoCores for SM 7.0 is undefined.  Default to use 128 Cores/SM
+MapSMtoCores for SM 7.0 is undefined.  Default to use 128 Cores/SM
+  (80) Multiprocessors, (128) CUDA Cores/MP:     10240 CUDA Cores
+  GPU Max Clock rate:                            1380 MHz (1.38 GHz)
+  Memory Clock rate:                             877 Mhz
+  Memory Bus Width:                              4096-bit
+  L2 Cache Size:                                 6291456 bytes
+  Maximum Texture Dimension Size (x,y,z)         1D=(131072), 2D=(131072, 65536), 3D=(16384, 16384, 16384)
+  Maximum Layered 1D Texture Size, (num) layers  1D=(32768), 2048 layers
+  Maximum Layered 2D Texture Size, (num) layers  2D=(32768, 32768), 2048 layers
+  Total amount of constant memory:               65536 bytes
+  Total amount of shared memory per block:       49152 bytes
+  Total number of registers available per block: 65536
+  Warp size:                                     32
+  Maximum number of threads per multiprocessor:  2048
+  Maximum number of threads per block:           1024
+  Max dimension size of a thread block (x,y,z): (1024, 1024, 64)
+  Max dimension size of a grid size    (x,y,z): (2147483647, 65535, 65535)
+  Maximum memory pitch:                          2147483647 bytes
+  Texture alignment:                             512 bytes
+  Concurrent copy and kernel execution:          Yes with 7 copy engine(s)
+  Run time limit on kernels:                     No
+  Integrated GPU sharing Host Memory:            No
+  Support host page-locked memory mapping:       Yes
+  Alignment requirement for Surfaces:            Yes
+  Device has ECC support:                        Disabled
+  Device supports Unified Addressing (UVA):      Yes
+  Device PCI Domain ID / Bus ID / location ID:   0 / 59 / 0
+  Compute Mode:
+     < Exclusive Process (many threads in one process is able to use ::cudaSetDevice() with this device) >
+
+Device 1: "Tesla V100-PCIE-16GB"
+  CUDA Driver Version / Runtime Version          10.0 / 7.5
+  CUDA Capability Major/Minor version number:    7.0
+  Total amount of global memory:                 16130 MBytes (16914055168 bytes)
+MapSMtoCores for SM 7.0 is undefined.  Default to use 128 Cores/SM
+MapSMtoCores for SM 7.0 is undefined.  Default to use 128 Cores/SM
+  (80) Multiprocessors, (128) CUDA Cores/MP:     10240 CUDA Cores
+  GPU Max Clock rate:                            1380 MHz (1.38 GHz)
+  Memory Clock rate:                             877 Mhz
+  Memory Bus Width:                              4096-bit
+  L2 Cache Size:                                 6291456 bytes
+  Maximum Texture Dimension Size (x,y,z)         1D=(131072), 2D=(131072, 65536), 3D=(16384, 16384, 16384)
+  Maximum Layered 1D Texture Size, (num) layers  1D=(32768), 2048 layers
+  Maximum Layered 2D Texture Size, (num) layers  2D=(32768, 32768), 2048 layers
+  Total amount of constant memory:               65536 bytes
+  Total amount of shared memory per block:       49152 bytes
+  Total number of registers available per block: 65536
+  Warp size:                                     32
+  Maximum number of threads per multiprocessor:  2048
+  Maximum number of threads per block:           1024
+  Max dimension size of a thread block (x,y,z): (1024, 1024, 64)
+  Max dimension size of a grid size    (x,y,z): (2147483647, 65535, 65535)
+  Maximum memory pitch:                          2147483647 bytes
+  Texture alignment:                             512 bytes
+  Concurrent copy and kernel execution:          Yes with 7 copy engine(s)
+  Run time limit on kernels:                     No
+  Integrated GPU sharing Host Memory:            No
+  Support host page-locked memory mapping:       Yes
+  Alignment requirement for Surfaces:            Yes
+  Device has ECC support:                        Disabled
+  Device supports Unified Addressing (UVA):      Yes
+  Device PCI Domain ID / Bus ID / location ID:   0 / 216 / 0
+  Compute Mode:
+     < Exclusive Process (many threads in one process is able to use ::cudaSetDevice() with this device) >
+> Peer access from Tesla V100-PCIE-16GB (GPU0) -> Tesla V100-PCIE-16GB (GPU1) : Yes
+> Peer access from Tesla V100-PCIE-16GB (GPU1) -> Tesla V100-PCIE-16GB (GPU0) : Yes
+
+deviceQuery, CUDA Driver = CUDART, CUDA Driver Version = 10.0, CUDA Runtime Version = 7.5, NumDevs = 2, Device0 = Tesla V100-PCIE-16GB, Device1 = Tesla V100-PCIE-16GB
+Result = PASS
+GMP version 6.0.0.
+Max grid size = 256
+Initialization time: 311.217 ms.
+***************************** Input size = 163840 (160 Kibit); gcd bits = 1 *****************************
+Modular gcd correct
+MOD time(avg): 931.498 ms
+GMP time     : 6.722 ms
+MOD/GMP ratio: 138.576
+
+
+-----------------------
+Resources requested:
+nodes=1:ppn=1:gpus=2
+mem=4gb
+-----------------------
+Resources used:
+cput=00:00:11
+walltime=00:00:12
+mem=0.051GB
+vmem=9.927GB
+-----------------------
+Resource units charged (estimate):
+0.000 RUs
+-----------------------
